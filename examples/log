@@ -1,0 +1,29 @@
+#!log vim:set fdm=marker fmr=◘,◘ ts=4 ai tw=75 ft=: ◘1
+◘1 09/04 Fri | log
+◘1 09/05 Sat | example
+◘1 2009-09-05 | an entry
+# comment
+[todo]  ⇐ if using Vim, use 'gf' on the word to jump to the file
+[foo/bar]  ⇐ ditto
+
+◘1 quote | Bertrand Russell
+The trouble with the modern world is that the stupid are cocksure while the
+intelligent are full of doubt.
+◘1 quote | Isaac Asimov
+The saddest aspect of life right now is that science gathers knowledge
+faster than society gathers wisdom.
+◘1 quote | Kurt Vonnegut
+We are what we pretend to be, so we must be careful about what we pretend
+to be.
+◘1 recipe | Gazpacho
+Combine one pound tomatoes cut into chunks, a cucumber peeled and cut into
+chunks, two or three slices stale bread torn into pieces, a quarter-cup
+olive oil, two tablespoons sherry vinegar and a clove of garlic in a
+blender with one cup water and a couple of ice cubes. Process until smooth,
+adding water if necessary. Season with salt and pepper, then serve or
+refrigerate, garnished with anchovies if you like, and a little more olive
+oil.
+◘1 recipe | Egg in a hole, glorified
+Tear a hole in a piece of bread and fry in butter. Crack an egg into the
+hole. Deglaze pan with a little sherry vinegar mixed with water, and more
+butter; pour over egg.

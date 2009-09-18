@@ -1,0 +1,921 @@
+#!/bin/bash
+#########################################################################
+#
+#   Copyright 2009 David Liang
+#
+#   This program is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#   Revisions:
+#   2009-07-23  File created
+#   2009-08-20  Rewrite with improved functionality
+#
+#########################################################################
+
+PROG=$(basename "$0")
+VERSION="0.8"
+
+COMMENT='#'
+TS=4
+
+HEADER="$COMMENT"'!log'
+RAND=rand
+SEP=':'
+
+opts=(-c"$COMMENT")
+popts=(-p)
+
+[ ! "$COLUMNS" ] && COLUMNS=80
+
+printUsage() {
+local SPCS=$(printf '%*s' ${#PROG} '')
+cat << -EOF-
+Usage: $PROG  [FILE]  [OPERATION]  [PARAMETERS]
+       $SPCS  [OPERATION]  [FILE]  [PARAMETERS]
+Operations:
+       $SPCS  m | p[fl] | o[fl] | t | e[fl]    [RANGE]... [PATTERN]...
+       $SPCS  d    [RANGE: [+-]N | N- | N-M ]...
+       $SPCS  x | i       [N]  [LINE|-]
+       $SPCS  a | s            [LINE|-]
+       $SPCS  n[DELIM]  FILE   [LINE|-]
+       $SPCS  c | r | h
+-EOF-
+[ "$1" = "h" ] && echo "
+Options: [--help] [-wnc] [-viso] [-f] [-e] [-q]"
+}
+
+helpText() {
+printf "%s" "$PROG $VERSION
+
+Command-line interface for displaying and managing text logs.
+
+$(printUsage)
+
+A FILE may be specified immediately after \"$PROG\" or after the operational \
+keyword. If not present, it defaults to \"$PROG\". FILE is a text file in \
+\$LOG_DIR (${LOG_DIR:-not set}) or a path to a text file, the first line of \
+which is in the following format:
+
+  $HEADER [MODELINE] [template:N] [DEFAULT] [DELIM]
+
+DELIM is a non-alphanumeric sequence used to delineate the file's entries. If \
+it's not present, each non-blank line counts as an entry. Comments, which \
+begin with '$COMMENT' and continue to the end of the line, are ignored. If \
+DELIM is not specified, comments and blank lines are associated with the \
+previous non-blank line.
+
+DEFAULT specifies a default operation for the file; it may be any of the \
+operations listed below except [dncr]. Additionally, it may be \"[ias]-\" for \
+adding an entry using input from stdin. The default operation in the absence \
+of DEFAULT is \"p\".
+
+If \"template\" is specified, the Nth entry will be used as a template for \
+new entries. MODELINE is currently supported only for Vim modelines of the \
+form \"vim:set {options}:\".
+
+\$EDITOR should be set to launch your preferred text editor. The command must \
+run in the foreground.
+
+Operations:
+
+Where allowed, each RANGE selects one or more entries as follows (N, M ≥ 0):
+  N           Nth entry
+  +N  -N      first/last N entries
+  N-          Nth entry onwards
+  N-M         entries N to M (inclusive)
+
+For certain operations, PATTERN limits entries to those whose first lines \
+contain the regular expression PATTERN.
+
+For the operations [poe], the letters \"f\" and \"l\" may be appended to \
+specify only the first or last matching entry, respectively.
+
+  m           print a random entry
+  p[fl]       print all selected entries
+  o[fl]       print a one-line summary for each entry
+  t           count and print the total number of selected entries
+  e[fl]       edit selected entries or (without parameters) the entire file
+
+If more than one matching entry is found, you will be prompted to select from \
+a menu. A line will be read in the form of
+  [ N | N- | -N | N-M ]...
+where each element specifies an entry N, entries starting from N, entries in \
+the range 1 to N and in the range N to M, respectively. A simple return will \
+select all displayed entries for editing, and \
+$(stty -a | awk -v RS=';' '$1=="eof" {print $3}') will cancel selection. To \
+automatically edit the first or last matching entry, use \"ef\" or \"el\" \
+instead of \"e\".
+
+For the operations [iasxn], one or more arguments may follow, to be used as \
+input for the entry. Alternatively, \"-\" specifies that input should be read \
+from stdin. If neither is present, the default action for the operations \
+[ias] is to launch \$EDITOR (${EDITOR:-not set}); for \"x\", to read input \
+from stdin; and for \"n\", to exit after file creation.
+
+  d           delete entries in range
+  x [N]       extend entry N ≥ 0 (the last entry by default)
+  i [N]       insert an entry before entry N ≥ 1 (1 by default)
+  a           append an entry
+  s           insert an entry in sorted order, based on its first line
+              i.e. before the first entry that is lexicographically after it
+  n[DELIM]    create a new FILE in \$LOG_DIR, with optional DELIM
+  c   r       clear/remove FILE
+  h           print the usage string
+
+Options:
+  -h, --help  print this help message and exit
+  -w          do not wrap entries at $COLUMNS
+  -n          do not number entries
+  -c          canonically number entries
+  -v          invert sense for pattern matching (exclude entries that match)
+  -i          ignore case when matching PATTERN's
+  -s          search entire entries, including comments, for PATTERN's
+              (instead of only searching the first line)
+  -o          treat multiple PATTERN's as disjunctive rather than conjunctive
+  -f          edit entries with context:
+              edit FILE itself when adding or editing a single entry
+              open FILE concurrently if editing multiple entries
+  -e          use alternate editor \$LOG_EDITOR (${LOG_EDITOR:-not set})
+  -q          quiet (suppress informative messages)
+
+" | fold -sw $COLUMNS
+}
+
+errorUsage() {
+    printUsage >&2
+    [ $# -gt 0 ] && echo >&2 $'\n'"$PROG: $@"
+    exit 2
+}
+
+cleanUp() {
+    rm -rf "$TEMPFILE" "$TEMPDIR"
+}
+
+errorExit() {
+    if [[ "$1" =~ ^[0-9]+$ ]]
+    then code=$1 && shift
+    else code=3
+    fi
+    [ $# -gt 0 ] && echo >&2 "$PROG: $@"
+    cleanUp
+    exit $code
+}
+trap "errorExit aborted" 2 3
+trap "errorExit terminated" 1 15
+
+testExit() {
+    if [ "$1" != 0 ]; then
+        errorExit "$@"
+    fi
+}
+
+if ! type $RAND &>/dev/null; then
+    errorExit 127 "$RAND: command not found"
+elif [ ! -d "$LOG_DIR" ]; then
+    if [ ! "$LOG_DIR" ]; then
+        errorExit 1 "Please setup and export \$LOG_DIR"
+    else
+        errorExit "$LOG_DIR: No such directory"
+    fi
+fi
+
+# options
+argv=()
+
+_nowrap=
+_nonumb=
+_canonical=
+_or=
+_file=
+_quiet=
+
+_vim=
+_editall=
+
+EXTERN="$EDITOR"
+_EXTERN="EDITOR"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+    -w)         _nowrap=1 && shift
+                ;;
+    -w*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                _nowrap=1
+                ;;
+    -n)         _nonumb=1 && shift
+                ;;
+    -n*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                _nonumb=1
+                ;;
+    -c)         _canonical=1 && shift
+                ;;
+    -c*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                _canonical=1
+                ;;
+    -v)         opts+=(-v) && shift
+                ;;
+    -v*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                opts+=(-v)
+                ;;
+    -i)         opts+=(-i) && shift
+                ;;
+    -i*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                opts+=(-i)
+                ;;
+    -s)         opts+=(-s) && shift
+                ;;
+    -s*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                opts+=(-s)
+                ;;
+    -o)         _or=1 && shift
+                ;;
+    -o*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                _or=1
+                ;;
+    -f)         _file=1 && shift
+                ;;
+    -f*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                _file=1
+                ;;
+    -e)         shift
+                EXTERN="$LOG_EDITOR"
+                _EXTERN="LOG_EDITOR"
+                ;;
+    -e*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                EXTERN="$LOG_EDITOR"
+                _EXTERN="LOG_EDITOR"
+                ;;
+    -q)         _quiet=1 && shift
+                ;;
+    -q*)        rest="-${1:2}" && shift
+                set -- "$rest" "$@"
+                _quiet=1
+                ;;
+    -h*|--help) helpText
+                exit 0
+                ;;
+    -\?)        printUsage h
+                exit 0
+                ;;
+    --)         shift && break
+                ;;
+    -[^0-9]*)   errorUsage "Unknown option: ${1:0:2}"
+                ;;
+    *)          argv+=("$1") && shift
+                ;;
+    esac
+done
+
+set -- "${argv[@]}" "$@"
+
+[[ "$EXTERN" == *vim* ]] && _vim=1
+
+# operation and file
+OP=
+LOG=
+DELIM=
+LNUM=
+
+getOp() {
+    if [ "$1" = "h" ]; then
+        printUsage h
+        exit 0
+    elif [[ "$1" == [mpotedxiasncr] ]]; then
+        OP="$1"
+        _editall=1
+    elif [[ "$1" =~ ^([poe])([fl])$ ]]; then
+        OP="${BASH_REMATCH[1]}"
+        case "${BASH_REMATCH[2]}" in
+        f)  popts+=(--first)
+            ;;
+        l)  popts+=(--last)
+            ;;
+        esac
+    elif [[ "$1" =~ ^n[^[:alnum:]]+$ ]]; then
+        OP="n"
+        DELIM="${1#n}"
+    elif [[ "$1" == [a-z] ]]; then
+        errorUsage "Unrecognized operation: $1"
+    fi
+    return $(( 1 - ${#OP} ))
+}
+
+if getOp "$2"; then
+    [ ! "$1" ] && errorUsage
+    LOG="$1" && shift 2
+    _LOG="${LOG/#$HOME/~}"
+elif getOp "$1"; then
+    shift
+fi
+
+getFile() {
+    if [[ "$LOG" =~ ^(/|\.\.?/) ]]; then
+        FILE="$LOG"
+        LOG_DIR="$PWD"
+    else
+        FILE="$LOG_DIR/$LOG"
+    fi
+}
+
+if [ "$OP" = "n" ]; then
+    if [ ! "$LOG" ]; then
+        [ ! "$1" ] && errorUsage
+        LOG="$1" && shift
+        _LOG="${LOG/#$HOME/~}"
+    fi
+    getFile
+    [ -e "$FILE" ] && errorExit "$_LOG: File or directory exists"
+    if [ "$DELIM" ]; then
+        if [ "$_vim" ]; then
+            [[ "$DELIM" == *:* ]] && errorExit 1 "DELIM contains ':'"
+            HEAD="vim:set fdm=marker fmr=$DELIM,$DELIM: $DELIM"1
+        else
+            HEAD="$DELIM"
+        fi
+        HEAD="$HEADER $HEAD"
+    else
+        HEAD="$HEADER"
+    fi
+    DIR=$(dirname -- "$FILE")
+    if [ ! -d "$DIR" ]; then
+        mkdir -p "$DIR" || errorExit "$DIR: Could not create directory"
+    fi
+    echo "$HEAD" >"$FILE" || errorExit "$_LOG: Could not create file"
+    [ $# -eq 0 ] && exit
+    OP="a"
+else
+    if [ ! "$LOG" ]; then
+        if [[ -f "$LOG_DIR/$1" || -f "$1" || "$1" == */* ||
+              $# -gt 0 && "$OP" == [cr] ]]
+        then LOG="$1" && shift
+        else LOG="$PROG"
+        fi
+        _LOG="${LOG/#$HOME/~}"
+    fi
+    getFile
+    if [ ! -f "$FILE" ]; then
+        if [ -f "$LOG" ]; then
+            FILE="$LOG"
+            LOG_DIR="$PWD"
+        else
+            errorExit "$_LOG: No such file"
+        fi
+    fi
+fi
+
+BASE=$(basename -- "$LOG")
+opts+=("$FILE")
+
+# header line
+read HEAD <"$FILE"
+if [ $? -ne 0 ]; then
+    if [ ! -s "$FILE" ]
+    then errorExit "$_LOG: File empty"
+    else errorExit "$_LOG: Permission denied"
+    fi
+elif [ "${HEAD:0:${#HEADER}}" != "$HEADER" ]; then
+    errorExit 1 "$_LOG: Unrecognized file format"
+fi
+
+SPECS="${HEAD:${#HEADER}}"
+if [ ! "$OP" ]; then
+    if [[ "$SPECS" =~ \ ([mtxh]|[poe][fl]?|[ias]-?)( |$) ]]; then
+        case "${BASH_REMATCH[1]}" in
+        ?-) getOp "${BASH_REMATCH[1]:0:1}"
+            [ $# -eq 0 ] && set -- -
+            ;;
+        *)  getOp "${BASH_REMATCH[1]}"
+            ;;
+        esac
+    else
+        OP="p"
+    fi
+fi
+
+DELIM="${SPECS##* }"
+if [[ "$DELIM" =~ ^[^[:alnum:]]+1?$ ]]; then
+    _DELIM=$(echo "$DELIM" | sed 's#[].*?+(|)/\\^$[]#\\&#g')
+    opts+=(-d "$_DELIM")
+    TYPE=entry
+else
+    DELIM=
+    TYPE=line
+fi
+
+# functions
+echoc() {
+    local argv=() c
+    while [[ "$1" == -* ]]; do
+        argv+=("$1") && shift
+    done
+    [ $# -eq 0 ] && echo "${argv[@]}" && return
+    case "$1" in
+        r|red)      c=31 ;;
+        g|green)    c=32 ;;
+        y|yellow)   c=33 ;;
+        b|blue)     c=34 ;;
+        p|purple)   c=35 ;;
+        c|cyan)     c=36 ;;
+        *)          c=$1 ;;
+    esac
+    shift
+    [[ ! "$c" =~ ^[0-9]+$ ]] && return 1
+    echo -en "\e[$c;1m"
+    echo "${argv[@]}" "$@"
+    echo -en "\e[0m"
+}
+makeTemp() {
+    local tempdir type
+    if [ -d "$HOME/tmp" ]
+    then tempdir="$HOME/tmp"
+    else tempdir=/tmp
+    fi
+    if [ "$1" = TEMPFILE ]; then
+        type=file
+        TEMPFILE=$(mktemp -q -p "$tempdir" "$BASE.$TYPE${2:+.}$2.XXX")
+    else
+        type=directory
+        TEMPDIR=$(mktemp -qd -p "$tempdir" "$PROG.$$.XXX")
+    fi
+    if [ $? -ne 0 ]; then
+        errorExit "Could not create temp $type"
+    fi
+}
+TEMPFILE= && TEMPDIR=
+newTemp() {
+    eval "$1=\$(mktemp -q -p \"$TEMPDIR\" \"$BASE.$TYPE${2:+.}$2.XXX\")"
+    if [ $? -ne 0 ]; then
+        errorExit "Could not create temp file"
+    fi
+}
+parseRanges() {
+    popts+=($( for arg in "${@:2}"; do
+        echo "$arg"
+    done | awk -v OPT="$1" -v SEP="$SEP" '
+    function valid(num) {
+        if ("" num != 0 && num ~ /^0/)
+            return 0;
+        else
+            return 1;
+    } BEGIN { count = 0 } {
+        if ($0 ~ /^[+-]?[0-9]+$/) {
+            first = substr($0, 1, 1);
+            rest  = substr($0, 2);
+            if (first == "+") {
+                if (! valid(rest)) exit;
+                arg = SEP rest;
+            } else if (first == "-") {
+                if (rest == 0 || ! valid(rest)) exit;
+                arg = $0 SEP;
+            } else {
+                if (! valid($0)) exit;
+                arg = $0;
+            }
+            print OPT, arg;
+        } else if ($0 ~ /^[0-9]+-[0-9]*$/) {
+            split($0, a, "-");
+            if (! valid(a[1]) || ! valid(a[2])) exit;
+            if (a[2] != "") {
+                if (a[1] >= a[2]) exit;
+                print OPT, a[1] SEP a[2];
+            } else
+                print OPT, a[1] SEP;
+        } else
+            exit;
+        count += 1;
+    } END { exit count }' ))
+    return $?
+}
+parsePatterns() {
+    local arg pattern
+    if [ "$_or" ]; then
+        for arg in "$@"; do
+            pattern+="|$arg"
+        done
+        popts+=(-g "${pattern#|}")
+    else
+        for arg in "$@"; do
+            popts+=(-g "$arg")
+        done
+    fi
+}
+checkWritable() {
+    if [ ! -w "$FILE" ]; then
+        errorExit "$_LOG: Permission denied"
+    fi
+}
+checkEditor() {
+    if [ ! "$EXTERN" ]; then
+        errorExit 1 "Please setup and export \$$_EXTERN"
+    fi
+}
+appendDelim() {
+    if [ "$DELIM" ]; then
+        local sameline
+        [[ "$DELIM" == *1 ]] && sameline=-n && DELIM+=" "
+        echo $sameline "$DELIM" >>"$1"
+    fi
+}
+appendTemplate() {
+    if [[ "$SPECS" =~ \ template:([0-9]+)( |$) ]]; then
+        $RAND -r "${opts[@]}" -f"${BASH_REMATCH[1]}" >>"$1" || errorExit $?
+    else
+        appendDelim "$1"
+    fi
+}
+parseModeline() {
+    if [ "$MODELINE" ]; then
+        return 0
+    elif [[ "$_vim" && "$SPECS" =~ \ vim:\ *(set? [^:]+): ]]; then
+        MODELINE="${BASH_REMATCH[1]}"
+        if [[ "$MODELINE" =~ \ (ts|tabstop)=([1-9][0-9]*)( |$) ]]; then
+            TS="${BASH_REMATCH[2]}"
+        fi
+        return 0
+    else
+        return 1
+    fi
+}
+edit() {
+    local command=($EXTERN "$@")
+    if [ "$1" != "$FILE" ]; then
+        if [ "$_vim" ]; then
+            parseModeline && command+=(-c "${MODELINE//\"/\\\"}")
+            command+=(-f -c "silent! normal! zO")
+        fi
+        [ "$_file" ] && command+=("$FILE")
+    else
+        if [ "$LNUM" ]; then
+            command+=(+"$LNUM")
+            [ "$_vim" ] && command+=(-c "silent! normal! zO")
+        fi
+    fi
+    (cd "$LOG_DIR" && "${command[@]}" 2>/dev/null)
+    local code=$?
+    if [ $code -eq 127 ]; then
+        errorExit $code "$command: command not found"
+    elif [ $code -ne 0 ]; then
+        errorExit $code
+    fi
+}
+getTargets() {
+    if [[ "$1" != *$'\n'* ]]; then
+        targets=($(echo "$1" | awk 'END {print $1}'))
+        return
+    fi
+    echo >&2 -n "$1"$'\n'"$PS3" && read
+    [ $? -ne 0 ] && echo && exit
+    if [ ! "$REPLY" ]; then
+        targets=($(echo "$1" | awk '{print $1}'))
+    else
+        targets=($(echo "$1"$'\n'"$REPLY" | awk '{
+            if (i != "") {
+                choices[i] = 0;
+                max = i;
+            }
+            i = $1;
+        } END {
+            for (i = 1; i <= NF; ++i) {
+                if ($i ~ /^[0-9]+$/) {
+                    a[1] = a[2] = $i;
+                } else if ($i ~ /^-[0-9]+$/) {
+                    split($i, a, "-");
+                    a[1] = 0;
+                } else if ($i ~ /^[0-9]+-[0-9]*$/) {
+                    split($i, a, "-");
+                    if (a[2] == "")
+                        a[2] = max;
+                } else {
+                    print $i;
+                    exit 1;
+                }
+                for (j = a[1]; j <= a[2]; ++j) {
+                    if (j in choices)
+                        choices[j] = 1;
+                }
+            }
+            for (i in choices) {
+                if (choices[i])
+                    print i;
+            }
+        }'))
+        [ $? -ne 0 ] && errorExit 1 "Bad selection: ${targets[0]}"
+    fi
+}
+getRanges() {
+    ranges=($(echo "$@" | awk '{
+        nxt = 0;
+        for (i = 1; i <= NF; ++i) {
+            if ($i == nxt+1)
+                print nxt;
+            else if ($i > nxt)
+                print nxt "'$SEP'" $i-1;
+            print "t" $i;
+            nxt = $i + 1;
+        }
+    } END { print nxt "'$SEP'" }'))
+}
+getInput() {
+    input=$(cat /dev/stdin)
+    if [ $? -ne 0 -o -z "$input" ]; then
+        errorExit 1
+    fi
+}
+getIndex() {
+    local entry=$(cat "$1") prog
+    local comment='sub(/(^|[[:blank:]]+)'"$COMMENT"'.*/, "")'
+    if [ "$DELIM" ]; then
+    prog='{
+        if ($0 ~ /^'"$_DELIM"'/) {
+            if (found) exit;
+            sub(/^'"$_DELIM"'[[:blank:]]*/, "");
+            '"$comment"';
+            if ($0 != "") {
+                print;
+                exit;
+            } else
+                found = 1;
+        } else if (found) {
+            '"$comment"';
+            print;
+            exit;
+        }
+    }'
+    else
+    prog='{
+        '"$comment"';
+        if ($0 ~ /[^[:blank:]]/) {
+            print;
+            exit;
+        }
+    }'
+    fi
+    entry=$(printf "%s" "$entry" | awk "$prog") || return $?
+    $RAND "${opts[@]}" -a --first-line | awk -v LINE="$entry" '{
+        if ("" LINE < "" $0) {
+            NR -= 1;
+            exit;
+        }
+    } END { print NR + 1 }' || return $?
+    return ${PIPESTATUS[0]}
+}
+
+# main
+if [[ "$OP" == [mpo] ]]; then
+    [ ! "$_nowrap" -a "$OP" != "o" ] && popts+=(-w)
+    [ ! "$_nonumb" ] && popts+=(-n" ")
+    [ "$_canonical" ] && popts+=(--canonical)
+    parseModeline
+    [ "$TS" != 8 ] && popts+=(-t "$TS")
+fi
+
+case "$OP" in
+
+m|p|o|t)
+    if parseRanges -f "$@"
+    then popts+=(-a)
+    else shift $?
+    fi
+    parsePatterns "$@"
+    case "$OP" in
+    m)  $RAND "${opts[@]}" "${popts[@]}" -m
+        ;;
+    p)  $RAND "${opts[@]}" "${popts[@]}"
+        ;;
+    o)  $RAND "${opts[@]}" "${popts[@]}" --first-line | cut -c -$COLUMNS
+        exit ${PIPESTATUS[0]}
+        ;;
+    t)  $RAND "${opts[@]}" "${popts[@]}" --count
+        ;;
+    esac
+    ;;
+
+e)  checkEditor
+    if [ $# -eq 0 -a "$_editall" ]; then
+        edit "$FILE"
+        exit
+    fi
+    if parseRanges -f "$@"
+    then popts+=(-a)
+    else shift $?
+    fi
+    parsePatterns "$@"
+    parseModeline
+    [ "$TS" != 8 ] && popts+=(-t "$TS")
+    list=$( $RAND "${opts[@]}" "${popts[@]}" -n" " --first-line |
+            cut -c -$COLUMNS; testExit ${PIPESTATUS[0]} )
+    [ ! "$list" ] && errorExit 1
+    getTargets "$list"
+    if [ ${#targets[@]} -eq 0 ]; then
+        exit
+    elif [ "$_file" -a ${#targets[@]} -eq 1 ]; then
+        if [ "${targets[0]}" -eq 0 ]
+        then LNUM=1
+        else LNUM=$(( $($RAND -r "${opts[@]}" -f"0$SEP$((${targets[0]}-1))" |
+                        wc -l; testExit ${PIPESTATUS[0]}) + 1 ))
+        fi
+        edit "$FILE"
+        exit
+    fi
+
+    declare -a TEMP HASH
+    makeTemp
+    for N in "${targets[@]}"; do
+        newTemp TEMP[$N] "$N"
+        $RAND -r "${opts[@]}" -f"$N" >"${TEMP[$N]}" || errorExit $?
+        HASH[$N]=$(md5sum "${TEMP[$N]}" 2>/dev/null)
+    done
+    edit "${TEMP[@]}"
+    for N in "${targets[@]}"; do
+        if [ "${HASH[$N]}" -a \
+             "${HASH[$N]}" = "$(md5sum "${TEMP[$N]}" 2>/dev/null)" ]; then
+            unset TEMP[$N]
+        fi
+    done
+    if [ ${#TEMP[@]} -gt 0 ]; then
+        newTemp TEMPFILE
+        getRanges "${!TEMP[@]}"
+        for range in "${ranges[@]}"; do
+            if [[ "$range" == t* ]]; then
+                cat "${TEMP[${range#t}]}" >>"$TEMPFILE" || errorExit $?
+            else
+                $RAND -r "${opts[@]}" -f"$range" >>"$TEMPFILE" || errorExit $?
+            fi
+        done
+        checkWritable
+        cp "$TEMPFILE" "$FILE" || errorExit
+    fi
+    cleanUp
+    ;;
+
+d)  [ $# -eq 0 ] && exit
+    popts=()
+    if parseRanges -e "$@"
+    then :
+    else shift $?
+    fi
+    [ $# -gt 0 ] && errorUsage "Invalid argument for $OP: $1"
+    makeTemp TEMPFILE
+    $RAND -r "${opts[@]}" -a -f0 "${popts[@]}" >"$TEMPFILE" || errorExit $?
+    checkWritable
+    read <"$TEMPFILE"
+    if [ "$REPLY" != "$HEAD" ]
+    then echo "$HEAD" | cat - "$TEMPFILE" >"$FILE"
+    else cp "$TEMPFILE" "$FILE"
+    fi || errorExit
+    cleanUp
+    ;;
+
+x)  if [[ $# -eq 0 || ! "$1" =~ ^[0-9]+$ ]]
+    then N=
+    else N="$1" && shift
+    fi
+    extendMsg() {
+        local after
+        [ "$TYPE" = "line" ] && after=' after'
+        echoc blue "extend $_LOG${N:+$after $TYPE $N}:"
+    }
+    if [ $# -eq 1 -a "$1" != "-" -o $# -gt 1 ]; then
+        input="$@"
+    else
+        set --
+        [ ! "$_quiet" ] && extendMsg
+        getInput
+    fi
+    checkWritable
+    if [ ! "$N" ]; then
+        echo "$input" >>"$FILE" || errorExit
+    else
+        makeTemp TEMPFILE
+        $RAND -r "${opts[@]}" -f"0$SEP$N" >"$TEMPFILE" || errorExit $?
+        echo "$input" >>"$TEMPFILE"
+        $RAND -r "${opts[@]}" -f"$((N+1))$SEP" >>"$TEMPFILE" || errorExit $?
+        cp "$TEMPFILE" "$FILE" || errorExit
+        cleanUp
+    fi
+    if [ $# -gt 0 -a ! "$_quiet" ]; then
+        extendMsg
+        echo "$@"
+    fi
+    ;;
+
+i|a|s)
+    checkEditor
+    if [ "$OP" = "i" ]; then
+        if [[ $# -eq 0 || ! "$1" =~ ^[1-9][0-9]*$ ]]
+        then N=1
+        else N="$1" && shift
+        fi
+    fi
+    if [ $# -eq 1 -a "$1" = "-" ]; then
+        set --
+        [ ! "$_quiet" ] && echoc blue "new $_LOG $TYPE:"
+        getInput
+    elif [ $# -gt 0 ]; then
+        input="$@"
+    elif [ "$_file" -a "$OP" != "s" ]; then
+        checkWritable
+        if [ "$OP" = "i" ]; then
+            makeTemp TEMPFILE
+            $RAND -r "${opts[@]}" -f"0$SEP$((N-1))" >"$TEMPFILE" || errorExit $?
+            LNUM=$(( $(cat "$TEMPFILE" | wc -l) + 1 ))
+            appendTemplate "$TEMPFILE"
+            $RAND -r "${opts[@]}" -f"$N$SEP" >>"$TEMPFILE" || errorExit $?
+            cp "$TEMPFILE" "$FILE" || errorExit
+            cleanUp
+        else
+            LNUM=$(( $(cat "$FILE" | wc -l) + 1 ))
+            appendTemplate "$FILE" || errorExit
+        fi
+        edit "$FILE"
+        exit
+    else
+        unset input
+    fi
+
+    if [ "$OP" = "a" ]; then
+        makeTemp TEMPFILE
+    else
+        makeTemp
+        newTemp TEMPFILE "$N"
+    fi
+    if [ "${input+set}" ]; then
+        appendDelim "$TEMPFILE"
+        echo "$input" >>"$TEMPFILE"
+    else
+        appendTemplate "$TEMPFILE"
+        edit "$TEMPFILE"
+    fi
+    if (( $(cat "$TEMPFILE" 2>/dev/null | wc -m) > ${#DELIM}+1 )); then
+        if [ "$OP" = "s" ]; then
+            N=$(getIndex "$TEMPFILE") || errorExit $?
+        fi
+        checkWritable
+        if [[ "$OP" == [is] ]]; then
+            $RAND -r "${opts[@]}" -f"$N$SEP" >>"$TEMPFILE" || errorExit $?
+            newTemp NEWFILE
+            $RAND -r "${opts[@]}" -f"0$SEP$((N-1))" >"$NEWFILE" || errorExit $?
+            cp "$NEWFILE" "$FILE" || errorExit
+        fi
+        insertMsg() {
+            if [ "$N" ]
+            then echoc blue "insert $_LOG $TYPE $N$1"
+            else echoc blue "append $TYPE to $_LOG$1"
+            fi
+        }
+        cat "$TEMPFILE" >>"$FILE" || errorExit
+        if [ ! "$_quiet" ]; then
+            if [ $# -gt 0 ]; then
+                insertMsg :
+                echo "$@"
+            elif [ -z "$input" ]; then
+                insertMsg ...$'\n'ok
+            fi
+        fi
+    fi
+    cleanUp
+    ;;
+
+c)  [ $# -gt 0 ] && errorUsage
+    echoc red -n "clear $_LOG? " && read
+    if [[ "$REPLY" == [Yy]* ]]; then
+        makeTemp TEMPFILE
+        $RAND -r "${opts[@]}" -f0 >"$TEMPFILE" || errorExit $?
+        checkWritable
+        cp "$TEMPFILE" "$FILE" || errorExit
+        cleanUp
+    else
+        errorExit 1
+    fi
+    ;;
+
+r)  [ $# -gt 0 ] && errorUsage
+    echoc red -n "remove $_LOG? " && read
+    [[ "$REPLY" == [Yy]* ]] && rm "$FILE"
+    ;;
+
+*)  errorExit "Fatal error: undefined operation"
+    ;;
+
+esac
+
+# vim:set ts=4 sw=4 et:
