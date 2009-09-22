@@ -1,4 +1,4 @@
-# bash completion for log
+# bash completion for log and rand
 ! type log &>/dev/null && return 1
 
 # repository for log files
@@ -13,6 +13,10 @@ export LOG_EDITOR=vim
 # e.g. alias lg='log -i -f'
 alias lg='log'
 complete -o filenames -F _log log lg
+
+# rand completion
+type _longopt &>/dev/null &&
+complete -o filenames -F _longopt rand
 
 # completion for file aliases
 _log_alias() {
