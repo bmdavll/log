@@ -47,7 +47,7 @@ printUsage() {
 local SPCS=$(printf '%*s' ${#PROG} '')
 cat << -EOF-
 Usage: $PROG [-d DELIM]  [-c STR]  [-g PATTERN]... [-vis]
-       $SPCS [-a] [-f LIST]...  [-e LIST]...  [ -m | --first | --last ]
+       $SPCS [-a] [-f LIST]...  [-e LIST]...  [ --first | --last | -m ]
        $SPCS [--first-line]  [-n[...]] [-N[...]] [--canonical]  [-pr]
        $SPCS [-t N] [-w]  [ --list | --count ]  [--help]  [--]  [FILE]...
 -EOF-
@@ -107,10 +107,10 @@ Options:
   -e LIST, --exclude=LIST
                     exclude certain entries from selection (LIST format same
                     as for -f)
-  -m, --random      force a random selection among eligible entries; this is
-                    the default action in the absence of -a and -f (random
-                    selection implies -a unless -f is specified)
   --first  --last   only select the first or last eligible entry
+  -m, --random      force a random selection among eligible entries; this is
+                    the default action in the absence of -a, -f, --first, and
+                    --last  (random selection implies -a unless -f is present)
   --first-line      only print the first line from each entry
   -n[...]           number the entries and optionally append a string after
                     the number (e.g. -n'. ')
@@ -222,9 +222,9 @@ _not=
 _ignorecase=
 _searchall=
 _all=
-_random=
 _first=
 _last=
+_random=
 _firstline=
 _canonical=
 _preserve=
@@ -690,13 +690,13 @@ firstPass() {
                 print 0;
             if (! count)
                 exit;
-            if (RANDOM) {
-                srand('$RANDOM');
-                print matches[ int(rand() * count) ];
-            } else if (FIRST) {
+            if (FIRST) {
                 print matches[0];
             } else if (LAST) {
                 print matches[count-1];
+            } else if (RANDOM) {
+                srand('$RANDOM');
+                print matches[ int(rand() * count) ];
             } else {
                 for (i = 0; i < count; ++i)
                     print matches[i];
