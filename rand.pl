@@ -79,6 +79,8 @@ my (
     $not,
     $ignore_case,
     $all,
+    $canonical,
+    $wrap,
 );
 my %opts = (
     'grep' => [],
@@ -87,6 +89,8 @@ my %opts = (
     'all' => \$all,
     'fixed' => [],
     'exclude' => [],
+    'canonical' => \$canonical,
+    'wrap' => \$wrap,
 );
 GetOptions(
     \%opts,
@@ -127,9 +131,9 @@ sub argError {
     Usage(2, 0, "Invalid argument for --$_[0]: $_[1]");
 }
 
-my ($is_delimited, $re_delim);
+my ($delimited, $re_delim);
 if (exists $opts{delimiter}) {
-    $is_delimited = 1;
+    $delimited = 1;
     $re_delim = '[ \t]*\n?';
     eval { $re_delim = qr[^$opts{delimiter}$re_delim] };
     die errorFormat($@) if $@;
@@ -172,8 +176,9 @@ foreach (@ARGV) {
     } else {
         open($file, '<', $_) or warn "$_: $!" and next;
     }
+    # binmode $file, ":utf8";
     while (<$file>) {
-        if ($is_delimited) {
+        if ($delimited) {
             if (/$re_delim/) {
                 push @entries, $entry;
                 undef $entry;
@@ -196,9 +201,9 @@ shift @entries if not defined $entries[0];
 # prepend zeroth entry if not present
 if (@entries) {
     $tmp = $entries[0];
-    $tmp =~ s/$re_comment//s if not $is_delimited;
+    $tmp =~ s/$opts{comment}.*//s if exists $opts{comment} and not $delimited;
     if ($tmp =~ /$re_delim/) {
-        unshift @entries, '';
+        unshift @entries, undef;
     }
 }
 
@@ -222,8 +227,9 @@ my $re_range = qr[^(-?\d+)?($SEP)?(-?\d+)?$];
 sub parseList {
     my ($type, $threshold) = (shift, undef);
     my %hash;
-    my @range = grep {$_ ne ''}
-                     split( /\s*,\s*/, join(',', @{$opts{$type}}) );
+    my $list = join(',', @{$opts{$type}});
+    $list =~ s/^\s+|\s+$//g;
+    my @range = grep { $_ ne '' } split(/\s*,\s*/, $list);
     foreach (@range) {
         argError($type, $_) if not /$re_range/;
         my ($l, $u);
@@ -277,7 +283,7 @@ if (not @{$opts{fixed}} and not $all) {
 sub skip {
     $_ = shift;
     if ($all or $fixed{$_} or $_ >= $threshold) {
-        return 0 if exists $entries[$_];
+        return 0 if defined $entries[$_];
     }
     return 1;
 }
@@ -297,10 +303,10 @@ my ($E_DELIM, $E_COMM, $E_FIRST,
     1<<5, 0);
 {
     my $no_print = $opts{list} || $opts{count};
-    $ops|= $E_DELIM if $is_delimited and not $no_print || $opts{raw};
+    $ops|= $E_DELIM if $delimited and not $no_print || $opts{raw};
     $ops|= $E_COMM  if not $no_print || $opts{preserve};
     $ops|= $E_FIRST if $opts{'first-line'} and not $no_print;
-    $ops|= $S_DELIM if $is_delimited           and not $ops & $E_DELIM;
+    $ops|= $S_DELIM if $delimited              and not $ops & $E_DELIM;
     $ops|= $S_COMM  if not $opts{'search-all'} and not $ops & $E_COMM;
     $ops|= $S_FIRST if not $opts{'search-all'} and not $ops & $E_FIRST;
 }
@@ -308,17 +314,17 @@ my $re_first_line = qr[^\n*([^\n]*).*]s;
 my $no_grep = not @grep;
 my @indices;
 
-LOOP: for (my $i = 1; $i <= $#entries; ++$i) {
+LOOP: for (my $i = 0; $i <= $#entries; ++$i) {
     next if skip($i);
     push @indices, $i;
     $entries[$i] =~ s/$re_delim//        if $ops & $E_DELIM;
-    $entries[$i] =~ s/$re_comment//gm    if $ops & $E_COMM;
+    $entries[$i] =~ s/$re_comment//g     if $ops & $E_COMM;
     $entries[$i] =~ s/$re_first_line/$1/ if $ops & $E_FIRST;
-    next if $no_grep;
+    next if $no_grep or $i == 0;
 
     my $srch = $entries[$i];
     $srch        =~ s/$re_delim//        if $ops & $S_DELIM;
-    $srch        =~ s/$re_comment//gm    if $ops & $S_COMM;
+    $srch        =~ s/$re_comment//g     if $ops & $S_COMM;
     $srch        =~ s/$re_first_line/$1/ if $ops & $S_FIRST;
     foreach (@grep) {
         if ($srch !~ /$_/) {
@@ -345,13 +351,12 @@ if (@indices) {
 }
 
 # print list, count
-my $count = scalar(@indices);
-unshift @indices, 0 if not skip(0);
-
 if ($opts{count}) {
-    print $count, "\n";
+    print scalar(@indices), "\n";
     exit;
 }
+
+unshift @indices, 0 if not skip(0);
 exit if not @indices;
 
 if ($opts{list}) {
@@ -361,60 +366,91 @@ if ($opts{list}) {
 }
 
 # expand tabs
-if (exists $opts{tabs} or exists $opts{wrap}) {
+if (exists $opts{tabs} or $wrap) {
     my $re_tabs = qr[\G((?:[^\t\n]*\n)*)(.*?)(\t+)];
     $entries[$_] =~ s[$re_tabs]
                      [$1.$2.' 'x(length($3) * $ts - length($2) % $ts)]ge
     foreach @indices;
 }
 
-# Debug \@indices;
+# format number or bullet
+my ($number, $pre, $suf, $pad, $format, $count);
 
-my $break = '\s';
-my $separator = "\n";
-
-# my $number = '*';
-my $number = '[%d]';
-
-my $limit = 230;
-
-my $format;
-my ($pre, $aft);
-
-my $pad;
-if ($number =~ /^(.*?)%d(.*)$/) {
-    $pad = length($1) + length($2) + length($limit) + 1;
-    $pre = $1;
-    $aft = $2.' ';
-    $format = "%".$pad."s";
+if (exists $opts{N} or exists $opts{n} or exists $opts{number}) {
+    $number = 1;
+    my $max_num = $canonical ? $#indices+skip(0) : $indices[$#indices];
+    foreach ('N', 'n', 'number') {
+        $opts{$_} = '' if not defined $opts{$_};
+    }
+    if ($opts{number} ne '') {
+        if ($opts{number} =~ /^(.*?)%d(.*)/s) {
+            $pre = $1;
+            $suf = $2;
+        } else {
+            $number = 0;
+            $pre = '';
+            $suf = $opts{number};
+            $pad = length($suf);
+        }
+    } else {
+        $pre = $opts{N};
+        $suf = $opts{n};
+    }
+    $pad = length($pre.$max_num.$suf) if not defined $pad;
+    $pad += 1;
+    $suf .= ' ';
+    my $align = $pre ne '' ? '-' : '';
+    $format = '%'.$align.$pad.'s';
+    $count = skip(0) ? 0 : -1;
+} else {
+    $pad = 0;
 }
-else {
-    $pad = length($number);
-    $pre = $number;
-    $aft = '';
+
+my ($line_lim, $next_line_lim, $ll);
+if ($wrap) {
+    $line_lim = max($wrap - 1, $pad + 1);
+    $next_line_lim = $line_lim - $pad;
 }
-my $line_limit = ($opts{wrap} || 80) - length($pad) - 1;
-$line_limit = $pad+1 if $line_limit < $pad+1;
 
 $pad = ' ' x $pad;
-my $current = 0;
 
-sub wrap {
-    my $r = sprintf $format, $pre . $_[0] . $aft;
-    my $lead;
-    my $ret = '';
-    foreach (map { $lead ? $pad.$_ : ($lead = $r.$_) } split(/\n/, $_)) {
-        while ($_ =~ /\G(.{1,$line_limit})(\s|\z)/gc) {
-            $ret .= $1;
-            $ret .= "\n".$pad if pos != length;
-        }
-        $ret .= "\n";
+# binmode STDOUT, ":utf8";
+for my $i (@indices) {
+    if ($format) {
+        $entry = sprintf $format, $pre.( $number ? $canonical ? ++$count
+                                                              : $i
+                                                 : '' ).$suf;
+        $entry .= $entries[$i];
+        $entry =~ s/\n/\n$pad/g;
+        $entry =~ s/$pad$//;
+    } else {
+        $entry = $entries[$i];
     }
-    return $ret;
+    if ($wrap) {
+        chomp $entry;
+        my @lines = split(/\n/, $entry, -1);
+        foreach (@lines) {
+            $ll = $line_lim;
+            while ($_ !~ /\G\z/gc) {
+                if (/\G(.{0,$ll})(\s|\z)/gc) {
+                    print $1, $2;
+                    print "\n", $pad if $2;
+                } elsif (/\G(.{$ll})/gc) {
+                    print $1, "\n", $pad;
+                } else {
+                    die "FFFFFFFUUUUUUUUUUUU";
+                }
+                $ll = $next_line_lim;
+            }
+            print "\n";
+        }
+    } else {
+        print $entry;
+    }
 }
 
-
 #TODO check and not or
+
 __END__
 
 =head1 NAME
