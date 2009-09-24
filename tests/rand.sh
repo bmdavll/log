@@ -7,7 +7,14 @@ errorExit() {
 trap "errorExit aborted" 2 3
 trap "errorExit terminated" 1 15
 
-cd "$(dirname "$(readlink -f "$(which "$0")")")" 2>/dev/null || exit
+if type "$1" &>/dev/null
+then RAND="$1" && shift
+else RAND=rand
+fi
+
+[ $# -ne 0 ] && errorExit
+
+cd "$(dirname "$(readlink -f "$(which "$0")")")" 2>/dev/null || errorExit
 
 declare -a opt
 opt[1]=2 # -d
@@ -78,8 +85,8 @@ for i in $(seq 1 $tests); do
             ;;
         esac
     done
-    echo "	rand ${opts[@]}"
-    rand "${opts[@]}" || exit $?
+    echo "	$RAND ${opts[@]}"
+    $RAND "${opts[@]}" || exit $?
 done
 
 # vim:set ts=4 sw=4 et:
