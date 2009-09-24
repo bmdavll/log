@@ -1,8 +1,12 @@
 $ time rand.sh >rand.out
 
-0m40.19s	96.50%
+0m49.543s	90.13%
 
-$ sha1sum * ../rand
+$ time rand.sh rand.pl >rand.pl.out
+
+0m38.923s	89.75%
+
+$ sha1sum *
 1fecce3b351fa92bc1ebc9807761223608320592  delim.0.inp
 d83d9eee6117684005877955ee519e0aa3acb848  delim.1.inp
 1f46d6b6264607fdceadd566822ef937994ba68f  delim.1a.inp
@@ -13,7 +17,7 @@ b5962dbd22d7c070879a5f9278fb8d2686eabae6  lines.0.inp
 6dbc368f33ea530a5e22c882bc2ecc8a4bc08ae7  lines.1.inp
 954a52e032bf94cf46cd94edd110f32d2b5e02d7  lines.2.inp
 3e5dd66d2cb55f1c9dc7262ee067fd1e9d061ca4  lines.inp
-fa799161c489bcef920c43f3460feabeb95c8759  rand.out
-c390dc01a52ec1e31fadc2b41e923550b2cae490  rand.sh
-8ae8b02dfbf45f7dee2502c6e99e61904f35fc64  randopts.sh
-621f4a79086f1c3d1b840054cb289118e87a7b60  ../rand
+071b03751692c45626ebe89acfddce26b9d0b5a4  rand.out
+0ffe9f6abcf1fafe8d59229806df8e3df8d3c795  rand.pl.out
+39814e182c4b45e2cf8359942368616b34ccc29d  rand.sh
+eced0665c2ed84851ddcda9022d928bddeddae9c  randopts.sh

@@ -7,7 +7,14 @@ errorExit() {
 trap "errorExit aborted" 2 3
 trap "errorExit terminated" 1 15
 
-cd "$(dirname "$(readlink -f "$(which "$0")")")" 2>/dev/null || exit
+if type "$1" &>/dev/null
+then RAND="$1" && shift
+else RAND=rand
+fi
+
+[ $# -ne 0 ] && errorExit
+
+cd "$(dirname "$(readlink -f "$(which "$0")")")" 2>/dev/null || errorExit
 
 if type echoc &>/dev/null
 then c=c
@@ -18,21 +25,21 @@ echoExec() {
     echo "█◙█ $@" && "$@"
 }
 iterFiles() {
-    echoExec rand "${opts[@]}" empty.inp
+    echoExec $RAND "${opts[@]}" empty.inp
     for i in {0..2}; do
         for file in lines.$i*.inp; do
-            echoExec rand "${opts[@]}" "$file"
+            echoExec $RAND "${opts[@]}" "$file"
         done
     done
-    echoExec rand "${opts[@]}" lines.inp
+    echoExec $RAND "${opts[@]}" lines.inp
     python -c "print '█'*40"
-    echoExec rand "${opts[@]}" -d'>>' empty.inp
+    echoExec $RAND "${opts[@]}" -d'>>' empty.inp
     for i in {0..2}; do
         for file in delim.$i*.inp; do
-            echoExec rand "${opts[@]}" -d'>>' "$file"
+            echoExec $RAND "${opts[@]}" -d'>>' "$file"
         done
     done
-    echoExec rand "${opts[@]}" -d'>>' delim.inp
+    echoExec $RAND "${opts[@]}" -d'>>' delim.inp
 }
 runTest() {
     echo${c} -n ${c+red} "[$((++num))] "

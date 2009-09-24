@@ -611,6 +611,8 @@ firstPass() {
         }'
     main='{
         if ($0 ~ /^'"$DELIM"'/) {
+            if (NR == 1)
+                delete fixed[0];
             if (limit && current == limit)
                 exit;
             '"$delayed"'
@@ -657,6 +659,8 @@ firstPass() {
             line = $0;
         '"$COMMENT"';
         if ($0 ~ /[^ \t]/) {
+            if (NR == 1)
+                delete fixed[0];
             if (limit && current == limit)
                 exit;
             '"$delayed"'
