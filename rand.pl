@@ -29,6 +29,16 @@ my $PROG = basename($0);
 my $VERSION = '0.8';
 my $SEP = ':';
 
+sub Debug {
+	require Data::Dumper;
+	Data::Dumper->import qw(Dumper);
+	no warnings;
+	$Data::Dumper::Terse = 1;
+	$Data::Dumper::Indent = 0;
+	local ($,, $\) = (" ", "\n");
+	print STDERR map { Dumper($_) } @_;
+}
+
 BEGIN {
     sub errorFormat {
         s[(?:,?\ at\ (?:(?:$0|\(eval\ \d+\)|<\w+>|/usr/\S+)\ line\ \d+|
@@ -370,8 +380,8 @@ if (not $opts{'search-all'}) {
 my $re_first_line = qr[(?:^|\s*\n)([^\n]*).*]s;
 my $re_blank_line = qr[(?:^|\n)\K\s*\n];
 
-my $no_grep_or_sort = not (@grep or defined $sort);
-my $no_grep = not @grep;
+my $no_grep = not (@grep or @vgrep);
+my $no_grep_or_sort = ($no_grep and not defined $sort);
 
 my @indices;
 my %entries;
@@ -396,17 +406,22 @@ LOOP: for (my $i = 0; $i <= $#entries; ++$i) {
     next if $no_grep;
     foreach (@grep) {
         if ($srch !~ /$_/) {
-            pop @indices unless $not;
+            goto REMOVE unless $not;
             next LOOP;
         }
     }
     foreach (@vgrep) {
         if ($srch =~ /$_/) {
-            pop @indices unless $not;
+            goto REMOVE unless $not;
             next LOOP;
         }
     }
-    pop @indices if $not;
+    goto REMOVE if $not;
+    next;
+
+REMOVE:
+    pop @indices;
+    delete $entries{$i};
 }
 my $max_index = $indices[$#indices];
 
