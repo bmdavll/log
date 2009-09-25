@@ -29,7 +29,7 @@ COMMENT='#'
 TS=4
 
 HEADER="$COMMENT"'!log'
-RAND=rand
+RAND=rand.pl
 SEP=':'
 
 opts=(-c"$COMMENT")
