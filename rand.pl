@@ -100,7 +100,6 @@ sub Usage {
 }
 
 my (
-    $not,
     $ignore_case,
     $all,
     $sort,
@@ -111,7 +110,6 @@ my (
 my %opts = (
     'grep' => [],
     'grep-not' => [],
-    'not' => \$not,
     'ignore-case' => \$ignore_case,
     'all' => \$all,
     'fixed' => [],
@@ -132,7 +130,6 @@ GetOptions(
 
     'grep|g=s',
     'grep-not|G=s',
-    'not|v',
     'ignore-case|i',
     'search-all|s',
     'all|a',
@@ -380,8 +377,7 @@ if (not $opts{'search-all'}) {
 my $re_first_line = qr[(?:^|\s*\n)([^\n]*).*]s;
 my $re_blank_line = qr[(?:^|\n)\K\s*\n];
 
-my $no_grep = not (@grep or @vgrep);
-my $no_grep_or_sort = ($no_grep and not defined $sort);
+my $no_grep_or_sort = not (@grep or @vgrep or defined $sort);
 
 my @indices;
 my %entries;
@@ -401,27 +397,16 @@ LOOP: for (my $i = 0; $i <= $#entries; ++$i) {
     $srch =~ s/$re_comment//g       if $ops & $S_COMMT;
     $srch =~ s/$re_first_line/$1\n/ if $ops & $S_FIRST;
     $srch = "\n" if $srch eq '';
-    $entries{$i} = \$srch if defined $sort;
-
-    next if $no_grep;
     foreach (@grep) {
-        if ($srch !~ /$_/) {
-            goto REMOVE unless $not;
-            next LOOP;
-        }
+        goto POP if ($srch !~ /$_/);
     }
     foreach (@vgrep) {
-        if ($srch =~ /$_/) {
-            goto REMOVE unless $not;
-            next LOOP;
-        }
+        goto POP if ($srch =~ /$_/);
     }
-    goto REMOVE if $not;
+    $entries{$i} = \$srch if defined $sort;
     next;
-
-REMOVE:
+  POP:
     pop @indices;
-    delete $entries{$i};
 }
 my $max_index = $indices[$#indices];
 
@@ -611,8 +596,6 @@ $PROG - extraction of lines or sections from text files
 =item B< >B< >B<-g> I<PATTERN>, B<--grep> I<PATTERN>
 
 =item B< >B< >B<-G> I<PATTERN>, B<--grep-not> I<PATTERN>
-
-=item B< >B< >B<-v>, B<--not>
 
 =item B< >B< >B<-i>, B<--ignore-case>
 
