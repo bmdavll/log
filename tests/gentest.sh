@@ -69,7 +69,7 @@ for i in $(seq 1 $tests); do
         4)  case $c in
             0)  opts+=(--fixed=2:3,5 -f7:)
                 ;;
-            1)  opts+=(-a --exclude=:2 -e4:5,-1: -f0:3)
+            1)  opts+=(-a -e:2 -e4:5,-1: -f0:3)
                 ;;
             2)  opts+=(-a)
                 ;;

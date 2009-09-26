@@ -29,16 +29,6 @@ my $PROG = basename($0);
 my $VERSION = '0.8';
 my $SEP = ':';
 
-sub Debug {
-	require Data::Dumper;
-	Data::Dumper->import qw(Dumper);
-	no warnings;
-	$Data::Dumper::Terse = 1;
-	$Data::Dumper::Indent = 0;
-	local ($,, $\) = (" ", "\n");
-	print STDERR map { Dumper($_) } @_;
-}
-
 BEGIN {
     sub errorFormat {
         s[(?:,?\ at\ (?:(?:$0|\(eval\ \d+\)|<\w+>|/usr/\S+)\ line\ \d+|
@@ -76,7 +66,7 @@ sub Usage {
     &Man if $verbose == 2;
     my $OUT = ($exitval == 0 ? \*STDOUT : \*STDERR);
     if (@message) {
-        print $OUT @message, "\n\n";
+        print $OUT @message, "\n" x 2;
     } elsif ($exitval == 2) {
         print $OUT "\n";
     }
@@ -101,7 +91,6 @@ sub Usage {
 
 my (
     $ignore_case,
-    $all,
     $sort,
     $extract,
     $canonical,
@@ -111,9 +100,8 @@ my %opts = (
     'grep' => [],
     'grep-not' => [],
     'ignore-case' => \$ignore_case,
-    'all' => \$all,
     'fixed' => [],
-    'exclude' => [],
+    'except' => [],
     'sort' => \$sort,
     'extract' => \$extract,
     'canonical' => \$canonical,
@@ -134,7 +122,7 @@ GetOptions(
     'search-all|s',
     'all|a',
     'fixed|f=s',
-    'exclude|e=s',
+    'except|e=s',
     'random|m',
     'sort|S:s',
     'extract=s',
@@ -156,7 +144,7 @@ GetOptions(
 
 # process options
 Usage(0, 2) if $opts{man};
-Usage(0, 1, $PROG, "\t", $VERSION) if $opts{help};
+Usage(0, 1, $PROG, '  ', $VERSION) if $opts{help};
 Usage(0, 0) if $opts{usage};
 
 sub argError {
@@ -185,28 +173,40 @@ if (defined $opts{comment}) {
     $re_comment = qr[^];
 }
 
-my (@grep, @vgrep);
 $ignore_case = ($ignore_case ? 'i' : '');
+
+my @grep;
 foreach (@{$opts{grep}}) {
     push @grep, eval 'qr['.$_.']'.$ignore_case;
     die $@ if $@;
 }
-foreach (@{$opts{'grep-not'}}) {
-    push @vgrep, eval 'qr['.$_.']'.$ignore_case;
+my $vgrep;
+if (@{$opts{'grep-not'}}) {
+    $vgrep = eval 'qr['.join('|', @{$opts{'grep-not'}}).']'.$ignore_case;
     die $@ if $@;
 }
 
+if ($opts{all}) {
+    unshift @{$opts{fixed}}, '0:';
+} elsif (not @{$opts{fixed}}) {
+    unshift @{$opts{fixed}}, '1:';
+}
+
 if (defined $sort) {
-    if (defined $extract) {
-        $extract = eval 'sub ($) { local $_ = shift; '.$extract.' }';
-        die $@ if $@;
+    if ($opts{random} or $opts{count}) {
+        undef $sort;
     } else {
-        $extract = sub { shift };
+        if (defined $extract) {
+            $extract = eval 'sub ($) { local $_ = shift; '.$extract.' }';
+            die $@ if $@;
+        } else {
+            $extract = sub { shift };
+        }
+        $sort = '$a cmp $b' if $sort eq '';
+        $sort =~ s/(?<!{)(\$[ab])(?!}|->)/$1\->[1]/g;
+        $sort = eval 'sub () { no warnings; '.$sort.' }';
+        die $@ if $@;
     }
-    $sort = '$a cmp $b' if $sort eq '';
-    $sort =~ s/(?<!{)(\$[ab])(?!}|->)/$1\->[1]/g;
-    $sort = eval 'sub () { no warnings; '.$sort.' }';
-    die $@ if $@;
 }
 
 $opts{preserve} = 1 if $opts{raw};
@@ -240,14 +240,14 @@ foreach (@ARGV) {
         if ($delimited) {
             if (/$re_delim/) {
                 push @entries, $entry;
-                undef $entry;
+                $entry = '';
             }
         } else {
             $tmp = $_;
             $tmp =~ s/$re_comment//;
             if ($tmp =~ /$re_delim/) {
                 push @entries, $entry;
-                undef $entry;
+                $entry = '';
             }
         }
         $entry .= $_;
@@ -268,7 +268,7 @@ if (@entries) {
 # determine included and excluded entries
 sub convertIndex {
     $_ = shift;
-    if (substr($_, 0, 1) eq '-') {
+    if (/^-/) {
         return  0 if $_ == 0;
         $_ = $#entries + int($_) + 1;
         return -1 if $_ == 0;
@@ -283,66 +283,72 @@ sub max { return $_[0] > $_[1] ? $_[0] : $_[1] }
 my $re_range = qr[^(-?\d+)?($SEP)?(-?\d+)?$];
 
 sub parseList {
-    my ($type, $threshold) = (shift, undef);
-    my %hash;
-    my $list = join(',', @{$opts{$type}});
-    $list =~ s/^\s+|\s+$//g;
-    my @range = grep { $_ ne '' } split(/\s*,\s*/, $list);
-    foreach (@range) {
+    my ($type, $href) = @_;
+    my ($l_thresh, $u_thresh);
+    foreach ( grep { $_ ne '' }
+              split( /\s*,\s*/, join(',', @{$opts{$type}}) ) )
+    {
         argError($type, $_) if not /$re_range/;
         my ($l, $u);
         if ($2) {
             argError($type, $_) if not (defined $1 or defined $3);
             if (not defined $1) {
-                $l = 1;
                 $u = convertIndex($3);
+                $href->{0} = 1 if $u == 0;
+                if (not defined $u_thresh) {
+                    $u_thresh = $u if $u >= 1;
+                } else {
+                    $u_thresh = max($u_thresh, $u);
+                }
+                next;
             } elsif (not defined $3) {
                 $l = convertIndex($1);
-                $hash{0} = 1 if $l == 0;
-                if (not defined $threshold) {
-                    $threshold = $l if $l <= $#entries;
+                $href->{0} = 1 if $l == 0;
+                if (not defined $l_thresh) {
+                    $l_thresh = $l if $l <= $#entries;
                 } else {
-                    $threshold = min($threshold, $l);
+                    $l_thresh = min($l_thresh, $l);
                 }
                 next;
             } else {
                 $l = convertIndex($1);
                 $u = convertIndex($3);
+                next if $l > $u;
             }
         } else {
             argError($type, $_) if defined $3;
             $l = $u = convertIndex($1);
         }
-        next if $l > $u;
-        $hash{0} = 1 if $l == 0 or $u == 0;
-        $u = min($u, (defined $threshold ? $threshold : $#entries));
-        for (my $i = max($l, 1); $i <= $u; ++$i) {
-            $hash{$i} = 1;
+        $href->{0} = 1 if $l == 0 or $u == 0;
+        $l = max($l, (defined $u_thresh ? $u_thresh+1 : 1));
+        $u = min($u, (defined $l_thresh ? $l_thresh-1 : $#entries));
+        for (my $i = $l; $i <= $u; ++$i) {
+            $href->{$i} = 1;
         }
     }
-    return \%hash, (defined $threshold ? max($threshold, 0) : undef);
+    return (defined $l_thresh ? max($l_thresh, 1)         : undef),
+           (defined $u_thresh ? min($u_thresh, $#entries) : undef);
 }
-my $threshold;
+my (%fixed, %except);
 
-($tmp, $threshold) = parseList 'exclude';
-delete $entries[$_] foreach keys %{$tmp};
-$#entries = $threshold-1 if defined $threshold;
+my ($excpt_l_thresh, $excpt_u_thresh) = parseList 'except', \%except;
+$#entries = $excpt_l_thresh - 1 if defined $excpt_l_thresh;
+$excpt_u_thresh = 0 if not defined $excpt_u_thresh;
+delete $entries[0] if $except{0};
 
-($tmp, $threshold) = parseList 'fixed';
-my %fixed = %{$tmp};
-delete $entries[0] if not $fixed{0};
-$threshold = $#entries+1 if not defined $threshold;
-
-my $random = $opts{random};
-if (not @{$opts{fixed}} and not $all) {
-    $random = $all = 1;
-}
+my ($fixed_l_thresh, $fixed_u_thresh) = parseList 'fixed',  \%fixed;
+$fixed_l_thresh = $#entries + 1 if not defined $fixed_l_thresh;
+$fixed_u_thresh = 0 if not defined $fixed_u_thresh;
 
 sub skip {
-    my $i = shift;
-    if ($all or $fixed{$i} or $i >= $threshold) {
-        return 0 if defined $entries[$i];
+    $_ = shift;
+    if ($_ == 0) {
+        return 0 if $fixed{0} and defined $entries[0];
+        return 1;
     }
+    return 0 if ( $_ >= $fixed_l_thresh or
+                  $_ <= $fixed_u_thresh or $fixed{$_} )
+              and $_ >  $excpt_u_thresh and not $except{$_};
     return 1;
 }
 
@@ -377,7 +383,7 @@ if (not $opts{'search-all'}) {
 my $re_first_line = qr[(?:^|\s*\n)([^\n]*).*]s;
 my $re_blank_line = qr[(?:^|\n)\K\s*\n];
 
-my $no_grep_or_sort = not (@grep or @vgrep or defined $sort);
+my $no_grep_or_sort = not (@grep or defined $vgrep or defined $sort);
 
 my @indices;
 my %entries;
@@ -400,9 +406,7 @@ LOOP: for (my $i = 0; $i <= $#entries; ++$i) {
     foreach (@grep) {
         goto POP if ($srch !~ /$_/);
     }
-    foreach (@vgrep) {
-        goto POP if ($srch =~ /$_/);
-    }
+    goto POP if defined $vgrep and $srch =~ /$vgrep/;
     $entries{$i} = \$srch if defined $sort;
     next;
   POP:
@@ -416,22 +420,25 @@ shift @indices if not skip(0);
 # choose random, first, or last
 # sort
 if (@indices) {
-    my $chosen;
-    if ($opts{random} or ($random and not $opts{first} || $opts{last})) {
-        $chosen = int(rand($#indices+1));
-    } elsif (defined $sort and not $opts{count}) {
-        @indices = map { $_->[0] } sort $sort
-                   map { [ $_, $extract->(${$entries{$_}}) ] }
-                   sort keys %entries;
+    my @chosen;
+    if ($opts{random}) {
+        push @chosen, int(rand($#indices+1));
+    } else {
+        if (defined $sort) {
+            @indices = map { $_->[0] }  sort $sort
+                       map { [ $_, $extract->(${$entries{$_}}) ] }
+                       sort keys %entries;
+        }
+        if ($opts{first}) {
+            push @chosen, 0;
+        }
+        if ($opts{last}) {
+            push @chosen, $#indices if not @chosen or $#indices != 0;
+        }
     }
-    if ($opts{first}) {
-        $chosen = 0;
-    } elsif ($opts{last}) {
-        $chosen = $#indices;
-    }
-    if (defined $chosen) {
-        @indices = $indices[$chosen];
-        $max_index = $chosen;
+    if (@chosen) {
+        @indices = @indices[@chosen];
+        $max_index = (@indices > 1 ? max(@indices) : $indices[0]);
     }
 }
 
@@ -452,22 +459,24 @@ if ($opts{list}) {
 }
 
 # strip delimiters, comments, lines after the first, and blank lines
-$ops = 0;
 if ($opts{'search-all'}) {
+    $ops = 0;
+
     $ops|= $E_DELIM if not $opts{raw} and $delimited;
     $ops|= $E_FIRST if $opts{'first-line'};
   do {
     $ops|= $E_COMMT if defined $opts{comment};
     $ops|= $E_BLANK if not $ops & $E_FIRST and not $delimited;
   } if not $opts{preserve};
-}
-if ($ops) {
-    for my $i (@indices) {
-        $entries[$i] =~ s/$re_delim//          if $ops & $E_DELIM;
-        $entries[$i] =~ s/$re_comment//g       if $ops & $E_COMMT;
-        $entries[$i] =~ s/$re_first_line/$1\n/ if $ops & $E_FIRST;
-        $entries[$i] =~ s/$re_blank_line//g    if $ops & $E_BLANK;
-        $entries[$i] = "\n" if $entries[$i] eq '';
+
+    if ($ops) {
+        for my $i (@indices) {
+            $entries[$i] =~ s/$re_delim//          if $ops & $E_DELIM;
+            $entries[$i] =~ s/$re_comment//g       if $ops & $E_COMMT;
+            $entries[$i] =~ s/$re_first_line/$1\n/ if $ops & $E_FIRST;
+            $entries[$i] =~ s/$re_blank_line//g    if $ops & $E_BLANK;
+            $entries[$i] = "\n" if $entries[$i] eq '';
+        }
     }
 }
 
@@ -504,7 +513,7 @@ if (defined $opts{N} or defined $opts{n} or defined $opts{number}) {
     $suf =~ s/%%/%/g;
     if ($number) {
         $suf .= ' ';
-        $pad = length $pre.( $canonical ? $#indices+skip(0)
+        $pad = length $pre.( $canonical ? $#indices + skip(0)
                                         : $max_index ).$suf;
     } else {
         $pad = length $suf;
@@ -558,6 +567,7 @@ foreach (@indices) {
 }
 
 __END__
+
 =head1 NAME
 
 $PROG - extraction of lines or sections from text files
@@ -605,7 +615,7 @@ $PROG - extraction of lines or sections from text files
 
 =item B< >B< >B<-f> I<LIST>, B<--fixed> I<LIST>
 
-=item B< >B< >B<-e> I<LIST>, B<--exclude> I<LIST>
+=item B< >B< >B<-e> I<LIST>, B<--except> I<LIST>
 
 =item B< >B< >B<-m>, B<--random>
 

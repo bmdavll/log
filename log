@@ -655,7 +655,7 @@ getIndex() {
     }'
     fi
     entry=$(printf "%s" "$entry" | awk "$prog") || return $?
-    $GET "${opts[@]}" -a --first-line | awk -v LINE="$entry" '{
+    $GET "${opts[@]}" --first-line | awk -v LINE="$entry" '{
         if ("" LINE < "" $0) {
             NR -= 1;
             exit;
@@ -677,7 +677,7 @@ case "$OP" in
 
 m|p|o|t)
     if parseRanges -f "$@"
-    then popts+=(-a)
+    then :
     else shift $?
     fi
     parsePatterns "$@"
@@ -700,7 +700,7 @@ e)  checkEditor
         exit
     fi
     if parseRanges -f "$@"
-    then popts+=(-a)
+    then :
     else shift $?
     fi
     parsePatterns "$@"
@@ -760,7 +760,7 @@ d)  [ $# -eq 0 ] && exit
     fi
     [ $# -gt 0 ] && errorUsage "Invalid argument for $OP: $1"
     makeTemp TEMPFILE
-    $GET -r "${opts[@]}" -a -f0 "${popts[@]}" >"$TEMPFILE" || errorExit
+    $GET -r "${opts[@]}" -a "${popts[@]}" >"$TEMPFILE" || errorExit
     checkWritable
     read <"$TEMPFILE"
     if [ "$REPLY" != "$HEAD" ]

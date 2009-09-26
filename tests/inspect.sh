@@ -55,7 +55,7 @@ runTest() {
 declare -i num=0
 
 test="Random"
-opts=()
+opts=(-m)
 runTest
 
 test="Grep, case insensitive"
@@ -95,11 +95,11 @@ opts=(-c'#' -e'0:1' -e'3:4' -n' ' --canonical)
 runTest
 
 test="Random, except all but first"
-opts=(-c'#' -e'2:' -n' ')
+opts=(-c'#' -m -e'2:' -n' ')
 runTest
 
 test="Random, fixed"
-opts=(-c'#' -f'1:3' -m -n' ')
+opts=(-c'#' -m -f'1:3' -n' ')
 runTest
 
 test="First, comments preserved"
