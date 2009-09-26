@@ -9,7 +9,7 @@ trap "errorExit terminated" 1 15
 
 if type "$1" &>/dev/null
 then RAND="$1" && shift
-else RAND=rand
+else errorExit
 fi
 
 [ $# -ne 0 ] && errorExit
@@ -36,6 +36,7 @@ echo 'cd "$(dirname "$(readlink -f "$(which "$0")")")" 2>/dev/null'
 echo
 
 for i in $(seq 1 $tests); do
+    echo -n 'echo "█◙█ '$i$'\t'
     opts=()
     for n in $(seq 1 ${#opt[@]}); do
         choices=${opt[$n]}
@@ -94,7 +95,7 @@ for i in $(seq 1 $tests); do
             ;;
         esac
     done
-    echo 'echo "█◙█ '"$i	$RAND ${opts[@]}"'"'
+    echo "${opts[@]}"\"
     echo "$RAND ${opts[@]}"
 done
 

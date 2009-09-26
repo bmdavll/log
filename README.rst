@@ -35,10 +35,10 @@ Print a one-line summary for each of the last 10 entries of the file
 
   log foo/bar o -10
 
-Count the number of entries that don't contain either *foo* or *bar* on the
-first line::
+Count the number of entries that contain *foo* but not *bar* on the first
+line::
 
-  log t -vo foo bar
+  log t foo :bar
 
 Edit the first entry that contains the pattern *bear* anywhere::
 
@@ -69,15 +69,15 @@ Create ``new`` log file in ``$LOG_DIR`` with entries delimited by "``>>``"::
 
   log n'>>' new
 
-``log`` is the script that provides the interface, while ``rand`` does the
-text processing.  For documentation, please see ``log --help`` and ``rand
---help``.
+``log`` is the script that provides the interface, while ``entries.pl`` does
+the text processing.  For documentation, please see ``log --help`` and
+``entries.pl --help``.
 
 
 Installation
 ============
 
-1. Make ``rand`` and ``log`` executable and available in one of your
+1. Make ``entries.pl`` and ``log`` executable and available in one of your
    ``$PATH`` directories.
 
 2. Edit ``log_completion.sh`` and setup environment variables ``$LOG_DIR``,
@@ -90,25 +90,15 @@ Installation
     . /path/to/log_completion.sh
     . /path/to/rand_completion.sh
 
-*Optional*
-----------
 
-* Compile ``_sd.c`` and make the resulting executable available in
-  ``$PATH``.  This will allow you to use the character escapes ``\s``,
-  ``\d``, ``\S``, and ``\D`` as aliases for ``[[:space:]]``,
-  ``[[:digit:]]``, etc. in your search patterns.
-  ::
+See the ``examples`` directory for example log files and scripts.
 
-    gcc -ansi -pedantic -Wall -O3 -o _sd _sd.c
-
-* Check the ``examples`` directory for example log files and scripts.
 
 Dependencies
 ------------
 
-``log`` and ``rand`` run on any POSIX-compliant system with ``coreutils``,
-``bash``, ``awk``, and ``sed``.  Using the GNU version of ``awk`` (``gawk``)
-will allow you to ignore case for pattern matching.
+``log`` and ``entries.pl`` run on any POSIX-compliant system with
+``coreutils``, ``bash``, ``awk``, and ``perl`` >= 5.10.0.
 
 
 Usage

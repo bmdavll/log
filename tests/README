@@ -1,25 +1,25 @@
-$ gentest.sh
 $ time rand.sh >rand.out
 
 0m44.095s	96.33%
 
-$ gentest.sh rand.pl
-$ time rand.pl.sh >rand.pl.out
+$ time entries.pl.sh >entries.pl.out
 
 0m34.143s	97.06%
 
 $ sha1sum *
+5a56611899e18a3742b2c95761b975d8ec2678cb  Makefile
 1fecce3b351fa92bc1ebc9807761223608320592  delim.0.inp
 d83d9eee6117684005877955ee519e0aa3acb848  delim.1.inp
 1f46d6b6264607fdceadd566822ef937994ba68f  delim.1a.inp
 82d7f6b949eb2dfb00173f443ce44fc3fa226f25  delim.2.inp
 f75e7534d0b16dec2821fe1500ecdadf95b6224f  delim.inp
 da39a3ee5e6b4b0d3255bfef95601890afd80709  empty.inp
-c125cd7ef174645abbf04f5d39d9707bcc2c3c76  gentest.sh
-eced0665c2ed84851ddcda9022d928bddeddae9c  inspect.sh
+47bd5f561159232422e53478bea2c739f6a2868f  entries.pl.out
+f7907988e99f094b216f65a815243681e07f4708  gentest.sh
+8ce0a84a8daf9cf1c4089e5909d97250677a84db  inspect.sh
 b5962dbd22d7c070879a5f9278fb8d2686eabae6  lines.0.inp
 6dbc368f33ea530a5e22c882bc2ecc8a4bc08ae7  lines.1.inp
 954a52e032bf94cf46cd94edd110f32d2b5e02d7  lines.2.inp
 3e5dd66d2cb55f1c9dc7262ee067fd1e9d061ca4  lines.inp
-66a2a82b92a3e960d36bf91eb80a574e6c2fd66d  rand.out
-7d85eceee73359067dff6d0da24a2224c93a1e7d  rand.pl.out
+17ad59d9ed2c39b72ad3641ca32508b113f55088  rand
+b0828768f5c4d8bfb0c11c2a668b550337f356d2  rand.out

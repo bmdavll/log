@@ -9,7 +9,7 @@ trap "errorExit terminated" 1 15
 
 if type "$1" &>/dev/null
 then RAND="$1" && shift
-else RAND=rand
+else errorExit
 fi
 
 [ $# -ne 0 ] && errorExit

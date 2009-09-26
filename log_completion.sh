@@ -16,7 +16,7 @@ complete -o filenames -F _log log lg
 
 # rand completion
 type _longopt &>/dev/null &&
-complete -o filenames -F _longopt rand rand.pl
+complete -o filenames -F _longopt entries.pl
 
 # completion for file aliases
 _log_alias() {

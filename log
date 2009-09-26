@@ -29,10 +29,11 @@ COMMENT='#'
 TS=4
 
 HEADER="$COMMENT"'!log'
-RAND=rand.pl
+GET=entries.pl
 SEP=':'
+NOT=':'
 
-opts=(-c"$COMMENT")
+opts=(-c "$COMMENT")
 popts=(-p)
 
 [ ! "$COLUMNS" ] && COLUMNS=80
@@ -43,7 +44,7 @@ cat << -EOF-
 Usage: $PROG  [FILE]  [OPERATION]  [PARAMETERS]
        $SPCS  [OPERATION]  [FILE]  [PARAMETERS]
 Operations:
-       $SPCS  m | p[fl] | o[fl] | t | e[fl]    [RANGE]... [PATTERN]...
+       $SPCS  m | p[fl] | o[fl] | t | e[fl]    [RANGE]... [[$NOT]PATTERN]...
        $SPCS  d    [RANGE: [+-]N | N- | N-M ]...
        $SPCS  x | i       [N]  [LINE|-]
        $SPCS  a | s            [LINE|-]
@@ -51,7 +52,7 @@ Operations:
        $SPCS  c | r | h
 -EOF-
 [ "$1" = "h" ] && echo "
-Options: [--help] [-wnc] [-viso] [-f] [-e] [-q]"
+Options: [--help] [-wnc] [-is] [-f] [-e] [-q]"
 }
 
 helpText() {
@@ -95,7 +96,8 @@ Where allowed, each RANGE selects one or more entries as follows (N, M ≥ 0):
   N-M         entries N to M (inclusive)
 
 For certain operations, PATTERN limits entries to those whose first lines \
-contain the regular expression PATTERN.
+contain the Perl regular expression PATTERN. If PATTERN is preceded by \
+'$NOT', select entries that do NOT match the pattern.
 
 For the operations [poe], the letters \"f\" and \"l\" may be appended to \
 specify only the first or last matching entry, respectively.
@@ -137,11 +139,9 @@ Options:
   -w          do not wrap entries at $COLUMNS
   -n          do not number entries
   -c          canonically number entries
-  -v          invert sense for pattern matching (exclude entries that match)
   -i          ignore case when matching PATTERN's
   -s          search entire entries, including comments, for PATTERN's
               (instead of only searching the first line)
-  -o          treat multiple PATTERN's as disjunctive rather than conjunctive
   -f          edit entries with context:
               edit FILE itself when adding or editing a single entry
               open FILE concurrently if editing multiple entries
@@ -162,9 +162,11 @@ cleanUp() {
 }
 
 errorExit() {
-    if [[ "$1" =~ ^[0-9]+$ ]]
-    then code=$1 && shift
-    else code=3
+    local -i code=$?
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        code=$1 && shift
+    elif [ $code -eq 0 ]; then
+        code=1
     fi
     [ $# -gt 0 ] && echo >&2 "$PROG: $@"
     cleanUp
@@ -179,8 +181,8 @@ testExit() {
     fi
 }
 
-if ! type $RAND &>/dev/null; then
-    errorExit 127 "$RAND: command not found"
+if ! type $GET &>/dev/null; then
+    errorExit 127 "$GET: command not found"
 elif [ ! -d "$LOG_DIR" ]; then
     if [ ! "$LOG_DIR" ]; then
         errorExit 1 "Please setup and export \$LOG_DIR"
@@ -195,7 +197,6 @@ argv=()
 _nowrap=
 _nonumb=
 _canonical=
-_or=
 _file=
 _quiet=
 
@@ -225,12 +226,6 @@ while [ $# -gt 0 ]; do
                 set -- "$rest" "$@"
                 _canonical=1
                 ;;
-    -v)         opts+=(-v) && shift
-                ;;
-    -v*)        rest="-${1:2}" && shift
-                set -- "$rest" "$@"
-                opts+=(-v)
-                ;;
     -i)         opts+=(-i) && shift
                 ;;
     -i*)        rest="-${1:2}" && shift
@@ -242,12 +237,6 @@ while [ $# -gt 0 ]; do
     -s*)        rest="-${1:2}" && shift
                 set -- "$rest" "$@"
                 opts+=(-s)
-                ;;
-    -o)         _or=1 && shift
-                ;;
-    -o*)        rest="-${1:2}" && shift
-                set -- "$rest" "$@"
-                _or=1
                 ;;
     -f)         _file=1 && shift
                 ;;
@@ -413,7 +402,7 @@ fi
 
 DELIM="${SPECS##* }"
 if [[ "$DELIM" =~ ^[^[:alnum:]]+1?$ ]]; then
-    _DELIM=$(echo "$DELIM" | sed 's#[].*?+(|)/\\^$[]#\\&#g')
+    _DELIM=$(echo "$DELIM" | perl -ne 'chomp; print quotemeta')
     opts+=(-d "$_DELIM")
     TYPE=entry
 else
@@ -507,16 +496,12 @@ parseRanges() {
 }
 parsePatterns() {
     local arg pattern
-    if [ "$_or" ]; then
-        for arg in "$@"; do
-            pattern+="|$arg"
-        done
-        popts+=(-g "${pattern#|}")
-    else
-        for arg in "$@"; do
-            popts+=(-g "$arg")
-        done
-    fi
+    for arg in "$@"; do
+        if [[ "$arg" == $NOT* ]]
+        then popts+=(-G "${arg#$NOT}")
+        else popts+=(-g "$arg")
+        fi
+    done
 }
 checkWritable() {
     if [ ! -w "$FILE" ]; then
@@ -537,7 +522,7 @@ appendDelim() {
 }
 appendTemplate() {
     if [[ "$SPECS" =~ \ template:([0-9]+)( |$) ]]; then
-        $RAND -r "${opts[@]}" -f"${BASH_REMATCH[1]}" >>"$1" || errorExit $?
+        $GET -r "${opts[@]}" -f"${BASH_REMATCH[1]}" >>"$1" || errorExit
     else
         appendDelim "$1"
     fi
@@ -670,7 +655,7 @@ getIndex() {
     }'
     fi
     entry=$(printf "%s" "$entry" | awk "$prog") || return $?
-    $RAND "${opts[@]}" -a --first-line | awk -v LINE="$entry" '{
+    $GET "${opts[@]}" -a --first-line | awk -v LINE="$entry" '{
         if ("" LINE < "" $0) {
             NR -= 1;
             exit;
@@ -697,14 +682,14 @@ m|p|o|t)
     fi
     parsePatterns "$@"
     case "$OP" in
-    m)  $RAND "${opts[@]}" "${popts[@]}" -m
+    m)  $GET "${opts[@]}" "${popts[@]}" -m
         ;;
-    p)  $RAND "${opts[@]}" "${popts[@]}"
+    p)  $GET "${opts[@]}" "${popts[@]}"
         ;;
-    o)  $RAND "${opts[@]}" "${popts[@]}" --first-line | cut -c -$COLUMNS
+    o)  $GET "${opts[@]}" "${popts[@]}" --first-line | cut -c -$COLUMNS
         exit ${PIPESTATUS[0]}
         ;;
-    t)  $RAND "${opts[@]}" "${popts[@]}" --count
+    t)  $GET "${opts[@]}" "${popts[@]}" --count
         ;;
     esac
     ;;
@@ -721,7 +706,7 @@ e)  checkEditor
     parsePatterns "$@"
     parseModeline
     [ "$TS" != 8 ] && popts+=(-t "$TS")
-    list=$( $RAND "${opts[@]}" "${popts[@]}" -n" " --first-line |
+    list=$( $GET "${opts[@]}" "${popts[@]}" -n" " --first-line |
             cut -c -$COLUMNS; testExit ${PIPESTATUS[0]} )
     [ ! "$list" ] && errorExit 1
     getTargets "$list"
@@ -730,7 +715,7 @@ e)  checkEditor
     elif [ "$_file" -a ${#targets[@]} -eq 1 ]; then
         if [ "${targets[0]}" -eq 0 ]
         then LNUM=1
-        else LNUM=$(( $($RAND -r "${opts[@]}" -f"0$SEP$((${targets[0]}-1))" |
+        else LNUM=$(( $($GET -r "${opts[@]}" -f"0$SEP$((${targets[0]}-1))" |
                         wc -l; testExit ${PIPESTATUS[0]}) + 1 ))
         fi
         edit "$FILE"
@@ -741,7 +726,7 @@ e)  checkEditor
     makeTemp
     for N in "${targets[@]}"; do
         newTemp TEMP[$N] "$N"
-        $RAND -r "${opts[@]}" -f"$N" >"${TEMP[$N]}" || errorExit $?
+        $GET -r "${opts[@]}" -f"$N" >"${TEMP[$N]}" || errorExit
         HASH[$N]=$(md5sum "${TEMP[$N]}" 2>/dev/null)
     done
     edit "${TEMP[@]}"
@@ -756,9 +741,9 @@ e)  checkEditor
         getRanges "${!TEMP[@]}"
         for range in "${ranges[@]}"; do
             if [[ "$range" == t* ]]; then
-                cat "${TEMP[${range#t}]}" >>"$TEMPFILE" || errorExit $?
+                cat "${TEMP[${range#t}]}" >>"$TEMPFILE" || errorExit
             else
-                $RAND -r "${opts[@]}" -f"$range" >>"$TEMPFILE" || errorExit $?
+                $GET -r "${opts[@]}" -f"$range" >>"$TEMPFILE" || errorExit
             fi
         done
         checkWritable
@@ -775,7 +760,7 @@ d)  [ $# -eq 0 ] && exit
     fi
     [ $# -gt 0 ] && errorUsage "Invalid argument for $OP: $1"
     makeTemp TEMPFILE
-    $RAND -r "${opts[@]}" -a -f0 "${popts[@]}" >"$TEMPFILE" || errorExit $?
+    $GET -r "${opts[@]}" -a -f0 "${popts[@]}" >"$TEMPFILE" || errorExit
     checkWritable
     read <"$TEMPFILE"
     if [ "$REPLY" != "$HEAD" ]
@@ -806,9 +791,9 @@ x)  if [[ $# -eq 0 || ! "$1" =~ ^[0-9]+$ ]]
         echo "$input" >>"$FILE" || errorExit
     else
         makeTemp TEMPFILE
-        $RAND -r "${opts[@]}" -f"0$SEP$N" >"$TEMPFILE" || errorExit $?
+        $GET -r "${opts[@]}" -f"0$SEP$N" >"$TEMPFILE" || errorExit
         echo "$input" >>"$TEMPFILE"
-        $RAND -r "${opts[@]}" -f"$((N+1))$SEP" >>"$TEMPFILE" || errorExit $?
+        $GET -r "${opts[@]}" -f"$((N+1))$SEP" >>"$TEMPFILE" || errorExit
         cp "$TEMPFILE" "$FILE" || errorExit
         cleanUp
     fi
@@ -836,10 +821,10 @@ i|a|s)
         checkWritable
         if [ "$OP" = "i" ]; then
             makeTemp TEMPFILE
-            $RAND -r "${opts[@]}" -f"0$SEP$((N-1))" >"$TEMPFILE" || errorExit $?
+            $GET -r "${opts[@]}" -f"0$SEP$((N-1))" >"$TEMPFILE" || errorExit
             LNUM=$(( $(cat "$TEMPFILE" | wc -l) + 1 ))
             appendTemplate "$TEMPFILE"
-            $RAND -r "${opts[@]}" -f"$N$SEP" >>"$TEMPFILE" || errorExit $?
+            $GET -r "${opts[@]}" -f"$N$SEP" >>"$TEMPFILE" || errorExit
             cp "$TEMPFILE" "$FILE" || errorExit
             cleanUp
         else
@@ -867,13 +852,13 @@ i|a|s)
     fi
     if (( $(cat "$TEMPFILE" 2>/dev/null | wc -m) > ${#DELIM}+1 )); then
         if [ "$OP" = "s" ]; then
-            N=$(getIndex "$TEMPFILE") || errorExit $?
+            N=$(getIndex "$TEMPFILE") || errorExit
         fi
         checkWritable
         if [[ "$OP" == [is] ]]; then
-            $RAND -r "${opts[@]}" -f"$N$SEP" >>"$TEMPFILE" || errorExit $?
+            $GET -r "${opts[@]}" -f"$N$SEP" >>"$TEMPFILE" || errorExit
             newTemp NEWFILE
-            $RAND -r "${opts[@]}" -f"0$SEP$((N-1))" >"$NEWFILE" || errorExit $?
+            $GET -r "${opts[@]}" -f"0$SEP$((N-1))" >"$NEWFILE" || errorExit
             cp "$NEWFILE" "$FILE" || errorExit
         fi
         insertMsg() {
@@ -899,7 +884,7 @@ c)  [ $# -gt 0 ] && errorUsage
     echoc red -n "clear $_LOG? " && read
     if [[ "$REPLY" == [Yy]* ]]; then
         makeTemp TEMPFILE
-        $RAND -r "${opts[@]}" -f0 >"$TEMPFILE" || errorExit $?
+        $GET -r "${opts[@]}" -f0 >"$TEMPFILE" || errorExit
         checkWritable
         cp "$TEMPFILE" "$FILE" || errorExit
         cleanUp
