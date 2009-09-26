@@ -1,10 +1,12 @@
+$ gentest.sh
 $ time rand.sh >rand.out
 
-0m49.543s	90.13%
+0m44.095s	96.33%
 
-$ time rand.sh rand.pl >rand.pl.out
+$ gentest.sh rand.pl
+$ time rand.pl.sh >rand.pl.out
 
-0m38.923s	89.75%
+0m34.143s	97.06%
 
 $ sha1sum *
 1fecce3b351fa92bc1ebc9807761223608320592  delim.0.inp
@@ -13,11 +15,11 @@ d83d9eee6117684005877955ee519e0aa3acb848  delim.1.inp
 82d7f6b949eb2dfb00173f443ce44fc3fa226f25  delim.2.inp
 f75e7534d0b16dec2821fe1500ecdadf95b6224f  delim.inp
 da39a3ee5e6b4b0d3255bfef95601890afd80709  empty.inp
+c125cd7ef174645abbf04f5d39d9707bcc2c3c76  gentest.sh
+eced0665c2ed84851ddcda9022d928bddeddae9c  inspect.sh
 b5962dbd22d7c070879a5f9278fb8d2686eabae6  lines.0.inp
 6dbc368f33ea530a5e22c882bc2ecc8a4bc08ae7  lines.1.inp
 954a52e032bf94cf46cd94edd110f32d2b5e02d7  lines.2.inp
 3e5dd66d2cb55f1c9dc7262ee067fd1e9d061ca4  lines.inp
-071b03751692c45626ebe89acfddce26b9d0b5a4  rand.out
-0ffe9f6abcf1fafe8d59229806df8e3df8d3c795  rand.pl.out
-39814e182c4b45e2cf8359942368616b34ccc29d  rand.sh
-eced0665c2ed84851ddcda9022d928bddeddae9c  randopts.sh
+66a2a82b92a3e960d36bf91eb80a574e6c2fd66d  rand.out
+7d85eceee73359067dff6d0da24a2224c93a1e7d  rand.pl.out
