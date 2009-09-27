@@ -3,6 +3,6 @@ all:
 	./gentest.sh entries.pl
 
 clean:
-	rm -f rand.sh entries.pl.sh
+	rm -f *.out rand.sh entries.pl.sh
 
 .PHONY: clean

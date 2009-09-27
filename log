@@ -25,13 +25,12 @@
 PROG=$(basename "$0")
 VERSION="0.8"
 
-COMMENT='#'
 TS=4
-
+NOT=':'
+COMMENT='#'
 HEADER="$COMMENT"'!log'
 GET=entries.pl
 SEP=':'
-NOT=':'
 
 opts=(-c "$COMMENT")
 popts=(-p)
@@ -197,6 +196,7 @@ argv=()
 _nowrap=
 _nonumb=
 _canonical=
+_searchall=
 _file=
 _quiet=
 
@@ -232,11 +232,11 @@ while [ $# -gt 0 ]; do
                 set -- "$rest" "$@"
                 opts+=(-i)
                 ;;
-    -s)         opts+=(-s) && shift
+    -s)         _searchall=1 && shift
                 ;;
     -s*)        rest="-${1:2}" && shift
                 set -- "$rest" "$@"
-                opts+=(-s)
+                _searchall=1
                 ;;
     -f)         _file=1 && shift
                 ;;
@@ -275,6 +275,8 @@ while [ $# -gt 0 ]; do
 done
 
 set -- "${argv[@]}" "$@"
+
+[ ! "$_searchall" ] && opts+=(-o)
 
 [[ "$EXTERN" == *vim* ]] && _vim=1
 
