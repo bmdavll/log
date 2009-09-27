@@ -161,16 +161,14 @@ if (defined $opts{delimiter}) {
     $re_delim = qr[\S];
 }
 
-my $re_comment;
+my ($re_comment, $re_comment_line, $re_comment_trailing);
 if (defined $opts{comment}) {
     eval {
-      my $line_comment = '(?:^|\n|\G)\K[ \t]*'.$opts{comment}.'.*(?:\n|$)';
-      my $trailing_part_comment = '\S\K[ \t]+'.$opts{comment}.'.*';
-      $re_comment = qr[$line_comment|$trailing_part_comment];
+      $re_comment = qr[(^|\s)$opts{comment}.*]s;
+      $re_comment_line = qr[(?:^|\n|\G)\K[ \t]*$opts{comment}.*(?:\n|$)];
+      $re_comment_trailing = qr[\S\K[ \t]+$opts{comment}.*];
     };
     die $@ if $@;
-} else {
-    $re_comment = qr[^];
 }
 
 $ignore_case = ($ignore_case ? 'i' : '');
@@ -237,7 +235,7 @@ foreach (@ARGV) {
         or die $!, ' for option encoding: ', $opts{encoding};
     }
     while (<$file>) {
-        if ($delimited) {
+        if ($delimited or not defined $re_comment) {
             if (/$re_delim/) {
                 push @entries, $entry;
                 $entry = '';
@@ -260,8 +258,7 @@ shift @entries if not defined $entries[0];
 # prepend zeroth entry if not present
 if (@entries) {
     $tmp = $entries[0];
-    $tmp =~ s/$opts{comment}.*//s if not $delimited and
-                                     defined $opts{comment};
+    $tmp =~ s/$re_comment// if not $delimited and defined $re_comment;
     unshift @entries, undef if $tmp =~ /$re_delim/;
 }
 
@@ -332,11 +329,17 @@ sub parseList {
 my (%fixed, %except);
 
 my ($excpt_l_thresh, $excpt_u_thresh) = parseList 'except', \%except;
+
 $#entries = $excpt_l_thresh - 1 if defined $excpt_l_thresh;
 $excpt_u_thresh = 0 if not defined $excpt_u_thresh;
-delete $entries[0] if $except{0};
+
+if ($except{0}) {
+    delete $entries[0];
+    delete $except{0};
+}
 
 my ($fixed_l_thresh, $fixed_u_thresh) = parseList 'fixed',  \%fixed;
+
 $fixed_l_thresh = $#entries + 1 if not defined $fixed_l_thresh;
 $fixed_u_thresh = 0 if not defined $fixed_u_thresh;
 
@@ -346,34 +349,35 @@ sub skip {
         return 0 if $fixed{0} and defined $entries[0];
         return 1;
     }
-    return 0 if ( $_ >= $fixed_l_thresh or
-                  $_ <= $fixed_u_thresh or $fixed{$_} )
-              and $_ >  $excpt_u_thresh and not $except{$_};
+    return 0 if ($_ >= $fixed_l_thresh or
+                 $_ <= $fixed_u_thresh or $fixed{$_})
+                and not $except{$_};
     return 1;
 }
 
 # search entries
 # get selected indices
 my $ops = 0;
-my ($E_DELIM, $E_COMMT, $E_FIRST, $E_BLANK,
-    $S_DELIM, $S_COMMT, $S_FIRST) = (
-    1<<0,
-    1<<1,
-    1<<2,
-    1<<3,
-    1<<4,
-    1<<5,
-    1<<6,
-);
-if (not $opts{'search-all'}) {
-  do {
+
+my $E_DELIM = 1<<0;
+my $E_COMMT = 1<<1;
+my $E_FIRST = 1<<2;
+my $E_BLANK = 1<<3;
+my $S_DELIM = 1<<4;
+my $S_COMMT = 1<<5;
+my $S_FIRST = 1<<6;
+
+my $grep_or_sort = (@grep or defined $vgrep or defined $sort);
+
+if ($grep_or_sort and not $opts{'search-all'}) {
+  if (not $opts{list} || $opts{count}) {
       $ops|= $E_DELIM if not $opts{raw} and $delimited;
       $ops|= $E_FIRST if $opts{'first-line'};
     do {
       $ops|= $E_COMMT if defined $opts{comment};
       $ops|= $E_BLANK if not $ops & $E_FIRST and not $delimited;
     } if not $opts{preserve};
-  } if not $opts{list} || $opts{count};
+  }
   do {
       $ops|= $S_DELIM if not $ops & $E_DELIM and $delimited;
       $ops|= $S_COMMT if not $ops & $E_COMMT and defined $opts{comment};
@@ -383,34 +387,53 @@ if (not $opts{'search-all'}) {
 my $re_first_line = qr[(?:^|\s*\n)([^\n]*).*]s;
 my $re_blank_line = qr[(?:^|\n)\K\s*\n];
 
-my $no_grep_or_sort = not (@grep or defined $vgrep or defined $sort);
-
 my @indices;
 my %entries;
 
-LOOP: for (my $i = 0; $i <= $#entries; ++$i) {
-    next if skip($i);
-    push @indices, $i;
-    $entries[$i] =~ s/$re_delim//          if $ops & $E_DELIM;
-    $entries[$i] =~ s/$re_comment//g       if $ops & $E_COMMT;
-    $entries[$i] =~ s/$re_first_line/$1\n/ if $ops & $E_FIRST;
-    $entries[$i] =~ s/$re_blank_line//g    if $ops & $E_BLANK;
-    $entries[$i] = "\n" if $entries[$i] eq '';
-
-    next if $no_grep_or_sort or $i == 0;
-    my $srch = $entries[$i];
-    $srch =~ s/$re_delim//          if $ops & $S_DELIM;
-    $srch =~ s/$re_comment//g       if $ops & $S_COMMT;
-    $srch =~ s/$re_first_line/$1\n/ if $ops & $S_FIRST;
-    $srch = "\n" if $srch eq '';
-    foreach (@grep) {
-        goto POP if ($srch !~ /$_/);
+if (not $grep_or_sort) {
+    if (scalar(%except) eq 0 and
+        $fixed_l_thresh == 1 || $fixed_u_thresh == $#entries) {
+        @indices = ($excpt_u_thresh+1..$#entries);
+        unshift @indices, 0 if not skip(0);
+    } else {
+        for my $i (0, $excpt_u_thresh+1..$#entries) {
+            push @indices, $i if not skip($i);
+        }
     }
-    goto POP if defined $vgrep and $srch =~ /$vgrep/;
-    $entries{$i} = \$srch if defined $sort;
-    next;
-  POP:
-    pop @indices;
+} else {
+    LOOP: for my $i (0, $excpt_u_thresh+1..$#entries) {
+        next if skip($i);
+        push @indices, $i;
+        if ($ops) {
+            $entries[$i] =~ s/$re_delim//          if $ops & $E_DELIM;
+            if ($ops & $E_COMMT) {
+                $entries[$i] =~ s/$re_comment_line//g;
+                $entries[$i] =~ s/$re_comment_trailing//g;
+            }
+            $entries[$i] =~ s/$re_first_line/$1\n/ if $ops & $E_FIRST;
+            $entries[$i] =~ s/$re_blank_line//g    if $ops & $E_BLANK;
+            $entries[$i] = "\n" if $entries[$i] eq '';
+        }
+        next if $i == 0;
+        my $srch = $entries[$i];
+        if ($ops) {
+            $srch =~ s/$re_delim//          if $ops & $S_DELIM;
+            if ($ops & $S_COMMT) {
+                $srch =~ s/$re_comment_line//g;
+                $srch =~ s/$re_comment_trailing//g;
+            }
+            $srch =~ s/$re_first_line/$1\n/ if $ops & $S_FIRST;
+            $srch = "\n" if $srch eq '';
+        }
+        foreach (@grep) {
+            goto POP if ($srch !~ /$_/);
+        }
+        goto POP if defined $vgrep and $srch =~ /$vgrep/;
+        $entries{$i} = \$srch if defined $sort;
+        next;
+      POP:
+        pop @indices;
+    }
 }
 my $max_index = $indices[$#indices];
 
@@ -438,7 +461,7 @@ if (@indices) {
     }
     if (@chosen) {
         @indices = @indices[@chosen];
-        $max_index = (@indices > 1 ? max(@indices) : $indices[0]);
+        $max_index = (@indices == 2 ? max(@indices) : $indices[0]);
     }
 }
 
@@ -459,7 +482,7 @@ if ($opts{list}) {
 }
 
 # strip delimiters, comments, lines after the first, and blank lines
-if ($opts{'search-all'}) {
+if (not $grep_or_sort or $opts{'search-all'}) {
     $ops = 0;
 
     $ops|= $E_DELIM if not $opts{raw} and $delimited;
@@ -472,7 +495,10 @@ if ($opts{'search-all'}) {
     if ($ops) {
         for my $i (@indices) {
             $entries[$i] =~ s/$re_delim//          if $ops & $E_DELIM;
-            $entries[$i] =~ s/$re_comment//g       if $ops & $E_COMMT;
+            if ($ops & $E_COMMT) {
+                $entries[$i] =~ s/$re_comment_line//g;
+                $entries[$i] =~ s/$re_comment_trailing//g;
+            }
             $entries[$i] =~ s/$re_first_line/$1\n/ if $ops & $E_FIRST;
             $entries[$i] =~ s/$re_blank_line//g    if $ops & $E_BLANK;
             $entries[$i] = "\n" if $entries[$i] eq '';
