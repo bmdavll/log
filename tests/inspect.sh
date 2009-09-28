@@ -8,7 +8,7 @@ trap "errorExit aborted" 2 3
 trap "errorExit terminated" 1 15
 
 if type "$1" &>/dev/null
-then RAND="$1" && shift
+then PROG="$1" && shift
 else errorExit
 fi
 
@@ -25,21 +25,21 @@ echoExec() {
     echo "█◙█ $@" && "$@"
 }
 iterFiles() {
-    echoExec $RAND "${opts[@]}" empty.inp
+    echoExec $PROG "${opts[@]}" empty.inp
     for i in {0..2}; do
         for file in lines.$i*.inp; do
-            echoExec $RAND "${opts[@]}" "$file"
+            echoExec $PROG "${opts[@]}" "$file"
         done
     done
-    echoExec $RAND "${opts[@]}" lines.inp
+    echoExec $PROG "${opts[@]}" lines.inp
     python -c "print '█'*40"
-    echoExec $RAND "${opts[@]}" -d'>>' empty.inp
+    echoExec $PROG "${opts[@]}" -d'>>' empty.inp
     for i in {0..2}; do
         for file in delim.$i*.inp; do
-            echoExec $RAND "${opts[@]}" -d'>>' "$file"
+            echoExec $PROG "${opts[@]}" -d'>>' "$file"
         done
     done
-    echoExec $RAND "${opts[@]}" -d'>>' delim.inp
+    echoExec $PROG "${opts[@]}" -d'>>' delim.inp
 }
 runTest() {
     echo${c} -n ${c+red} "[$((++num))] "

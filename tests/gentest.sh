@@ -8,28 +8,28 @@ trap "errorExit aborted" 2 3
 trap "errorExit terminated" 1 15
 
 if type "$1" &>/dev/null
-then RAND="$1" && shift
+then PROG="$1" && shift
 else errorExit
 fi
 
 [ $# -ne 0 ] && errorExit
 
 declare -a opt
-opt[1]=2 # -d
-opt[2]=2 # -c
-opt[3]=3 # -g [-v|-G] -is
-opt[4]=3 # -a -f -e
-opt[5]=4 # --first --first-line --last -n --canonical -r -w
-opt[6]=4 # -p -t --list --count
+opt[1]=2
+opt[2]=2
+opt[3]=3
+opt[4]=3
+opt[5]=4
+opt[6]=4
 
 declare -i tests=1 i
 for i in "${!opt[@]}"; do
     tests=$(( tests * ${opt[i]} ))
 done
 
-exec 1>"$RAND.sh"
+exec 1>"$PROG.sh"
 echo '#!/bin/bash'
-echo '# test script for '"$RAND"
+echo '# test script for '"$PROG"
 echo
 echo 'set -e'
 echo 'cd "$(dirname "$(readlink -f "$(which "$0")")")" 2>/dev/null'
@@ -58,20 +58,16 @@ for i in $(seq 1 $tests); do
         3)  case $c in
             1)  opts+=(-g"'[FB]oo'" -g"'B[aeiou]T'" -i)
                 ;;
-            2)  if [ "$RAND" = "rand" ]; then
-                    opts+=(--grep="'[fb]oo'" -g "'b[aeiou]t'" --not -s)
-                else
-                    opts+=(--grep-not="'[fb]oo'" -G "'b[aeiou]t'" -s)
-                fi
+            2)  opts+=(--grep-not="'[fb]oo'" -G "'b[aeiou]t'" -o)
                 ;;
             esac
             ;;
         4)  case $c in
-            0)  opts+=(--fixed=2:3,5 -f7:)
+            0)  opts+=(-f7:)
                 ;;
-            1)  opts+=(-a -e:2 -e4:5,-1: -f0:3)
+            1)  opts+=(-a -f0:3 -e:2 -e4:5,-1: -e0)
                 ;;
-            2)  opts+=(-a)
+            2)  opts+=(-a --sort)
                 ;;
             esac
             ;;
@@ -85,7 +81,7 @@ for i in $(seq 1 $tests); do
             esac
             ;;
         6)  case $c in
-            1)  opts+=(-p -t4)
+            1)  opts+=(-p -t4 --blank-line)
                 ;;
             2)  opts+=(--list)
                 ;;
@@ -96,9 +92,9 @@ for i in $(seq 1 $tests); do
         esac
     done
     echo "${opts[@]}"\"
-    echo "$RAND ${opts[@]}"
+    echo "$PROG ${opts[@]}"
 done
 
-chmod +x "$RAND.sh"
+chmod +x "$PROG.sh"
 
 # vim:set ts=4 sw=4 et:
