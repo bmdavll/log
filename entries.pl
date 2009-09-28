@@ -94,6 +94,7 @@ my (
     $sort,
     $extract,
     $canonical,
+    $blank,
     $wrap,
 );
 my %opts = (
@@ -105,6 +106,7 @@ my %opts = (
     'sort' => \$sort,
     'extract' => \$extract,
     'canonical' => \$canonical,
+    'blank-line' => \$blank,
     'wrap' => \$wrap,
 );
 GetOptions(
@@ -133,9 +135,10 @@ GetOptions(
     'n:s',
     'number:s',
     'canonical|C',
-    'first-line|F',
+    'blank-line',
     'preserve|p',
     'raw|r',
+    'first-line|F',
     'tabs|t:8',
     'wrap|w:'.($ENV{COLUMNS} || 80),
     'list',
@@ -345,8 +348,18 @@ if ($except{0}) {
 
 my ($fixed_l_thresh, $fixed_u_thresh) = parseList 'fixed',  \%fixed;
 
-$fixed_l_thresh = $#entries + 1 if not defined $fixed_l_thresh;
-$fixed_u_thresh = 0 if not defined $fixed_u_thresh;
+my $fixed = 0;
+my $UNDEF_L_THRESH = 1<<0;
+my $UNDEF_U_THRESH = 1<<1;
+
+if (not defined $fixed_l_thresh) {
+    $fixed |= $UNDEF_L_THRESH;
+    $fixed_l_thresh = $#entries + 1;
+}
+if (not defined $fixed_u_thresh) {
+    $fixed |= $UNDEF_U_THRESH;
+    $fixed_u_thresh = 0;
+}
 
 sub skip {
     $_ = shift;
@@ -382,9 +395,18 @@ my @indices;
 my %entries;
 
 if (not $grep_or_sort) {
-    if (scalar(%except) eq 0 and
-        $fixed_l_thresh == 1 || $fixed_u_thresh == $#entries) {
-        @indices = ($excpt_u_thresh+1..$#entries);
+    if ( (keys %except == 0 or keys %except == 1 and $except{0}) and
+         (keys %fixed  == 0 or keys %fixed  == 1 and $fixed{0} or
+          $fixed_l_thresh == 1 or $fixed_u_thresh == $#entries) ) {
+        if ($fixed != ($UNDEF_L_THRESH | $UNDEF_U_THRESH)) {
+            @indices = (
+                max( $fixed & $UNDEF_L_THRESH ? 1
+                                              : $fixed_l_thresh,
+                     $excpt_u_thresh+1 )
+                .. ( $fixed & $UNDEF_U_THRESH ? $#entries
+                                              : $fixed_u_thresh )
+            );
+        }
         unshift @indices, 0 if not skip(0);
     } else {
         for my $i (0, $excpt_u_thresh+1..$#entries) {
@@ -553,6 +575,7 @@ foreach (@indices) {
         $entry .= $entries[$_];
         $entry =~ s/\n\K/$pad/g;
         $entry =~ s/$pad$//;
+        $entry .= "\n" if $blank and $entry !~ /\n\n$/;
     } else {
         $entry = $entries[$_];
     }
@@ -650,11 +673,13 @@ $PROG - extraction of lines or sections from text files
 
 =item B< >B< >B<-C>, B<--canonical>
 
-=item B< >B< >B<-F>, B<--first-line>
+=item B< >B< >B<--blank-line>
 
 =item B< >B< >B<-p>, B<--preserve>
 
 =item B< >B< >B<-r>, B<--raw>
+
+=item B< >B< >B<-F>, B<--first-line>
 
 =item B< >B< >B<-t> [I<NUM>], B<--tabs> [I<NUM>]
 
