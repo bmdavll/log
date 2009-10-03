@@ -114,11 +114,15 @@ _log() {
     done
     COMPREPLY=("${compreply[@]}" $(compgen -W "$choices" -- "$cur"))
     if [ "$compfiles" ]; then
-        local IFS=$'\n'
-        COMPREPLY+=($( [ "$PWD" != "$LOG_DIR" ] && cd "$LOG_DIR" 2>/dev/null &&
-                       find . -wholename "./$cur*" \( -type f -o -type l \) |
-                       cut -c 3- )
-                    $( compgen -f -- "$cur" ))
+        local IFS=$'\n' N=$(echo "$cur" | perl -ne 'print scalar split "/"')
+        COMPREPLY+=($(
+            [ "$PWD" != "$LOG_DIR" ] && cd "$LOG_DIR" 2>/dev/null &&
+            find . -maxdepth $N -wholename "./$cur*" |
+            cut -c 3- | perl -lne '-d && print ($_, "/") || print'
+        ))
+        if [ ${#COMPREPLY[@]} -eq 0 -o $COMP_TYPE = 63 ]; then
+            COMPREPLY+=($( compgen -f -- "$cur" ))
+        fi
     fi
     return 0
 }
@@ -134,14 +138,15 @@ __log_op() {
     fi
 }
 __log_print() {
-    [ "$COMP_TYPE" = 63 ] && return 1
+    [ $COMP_TYPE = 63 ] && return 1
     local color=35
     output=$($LOG "$1" o 2>/dev/null)
     [ $? -ne 0 -o -z "$output" ] && return 1
     if [ -z "$cur" ]; then
         if [ $COMP_TYPE != 37 ]; then
             echo -e "\e[${color}m" && echo "$output" && echo -en "\e[0m"
-            [ -f "$LOG_DIR/$1" ] && compreply="$LOG_DIR/$1" || compreply="$1"
+            [ -f "$LOG_DIR/$1" ] && compreply="$LOG_DIR/$1" \
+                                 || compreply="$1"
             choices="$DBSP$( ls -lh "$compreply" | cut -d " " -f 5-7 | \
                              sed -e 's/\(.*\)[[:blank:]]\+/\1'$NBSP'/' \
                                  -e 's/[[:blank:]]\+/ '$NBSP'/' )"

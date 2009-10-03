@@ -538,7 +538,11 @@ checkEditor() {
 appendDelim() {
     if [ "$DELIM" ]; then
         local same_line
-        [[ "$DELIM" == *1 ]] && same_line=-n && DELIM+=' '
+        if [[ "$DELIM" == *1 ]]; then
+            same_line=-n && DELIM+=' '
+        elif [[ "$input" == "$DELIM"* ]]; then
+            same_line=-n
+        fi
         echo $same_line "$DELIM" >>"$1" || errorExit
     fi
 }
@@ -546,10 +550,10 @@ appendTemplate() {
     if [[ "$SPECS" =~ \ template:([0-9]+)( |$) ]]; then
         if [ "${BASH_REMATCH[1]}" -eq 0 ]; then
             appendDelim "$1"
-            $GET -r "${opts[@]}" -f0 | tail -n +2 >>"$1" || errorExit
+            $GET -r -f0 "${opts[@]}" | tail -n +2 >>"$1" || errorExit
             testExit ${PIPESTATUS[0]}
         else
-            $GET -r "${opts[@]}" -f"${BASH_REMATCH[1]}" >>"$1" || errorExit
+            $GET -r -f"${BASH_REMATCH[1]}" "${opts[@]}" >>"$1" || errorExit
         fi
     else
         appendDelim "$1"
@@ -580,6 +584,8 @@ edit() {
         if [ "$LNUM" ]; then
             command+=(+"$LNUM")
             [ "$_vim" ] && command+=(-c "silent! normal! zO")
+        else
+            [ "$_vim" ] && command+=(-c "silent! %foldclose")
         fi
     fi
     (cd "$LOG_DIR" && "${command[@]}" 2>/dev/null)
@@ -658,7 +664,10 @@ getInput() {
     fi
 }
 getIndex() {
-    local count entry
+    local sopts=("${opts[@]}") i count
+    for i in "${!sopts[@]}"; do
+        [ "${sopts[$i]}" = "$FILE" ] && unset sopts[$i] && break
+    done
     while (( count == 0 )); do
         if (( ${count+1} )); then
             echo >&2 -n "no entry found: [d]iscard or [E]dit? " && read
@@ -666,15 +675,17 @@ getIndex() {
             [[ "$REPLY" == d* ]] && errorExit 0
             edit "$1"
         fi
-        count=$($GET "${opts[@]/#$FILE/$1}" --count) || errorExit
+        count=$($GET --count "$1" "${sopts[@]}") || errorExit
     done
-    entry=$($GET -r "${opts[@]/#$FILE/$1}" -f1) || errorExit
-    N=$(printf "%s" "$entry" | $GET - "${opts[@]}" --sort --list | awk '{
-        count += 1;
-        if ($1 == 1) {
-            print count; exit;
-        }
-    }'; testExit ${PIPESTATUS[1]})
+    N=$($GET --sort --list <($GET -r -f1 "$1" "${sopts[@]}")               \
+                           <($GET -r -f"1$SEP" "${opts[@]}") "${sopts[@]}" \
+        | awk '{
+            count += 1;
+            if ($1 == 1) {
+                print count; exit;
+            }
+        }'
+        testExit ${PIPESTATUS[0]})
     [ ! "$N" ] && errorExit
 }
 
@@ -691,6 +702,7 @@ if [[ "$OP" == [mpoe] ]]; then
     parseModeline
     (( TS != 8 ))     && popts+=(--tabs=$TS)
 fi
+unset input
 
 case "$OP" in
 
@@ -717,14 +729,14 @@ e)  checkEditor
     fi
     parseRanges -f "$@" || shift $?
     parsePatterns "$@"
-    list=$( $GET "${opts[@]}" "${popts[@]}" -n" " --first-line |
+    list=$( $GET -n" " --first-line "${opts[@]}" "${popts[@]}" |
             cut -c -$COLUMNS; testExit ${PIPESTATUS[0]} )
     [ ! "$list" ] && errorExit 0
     getTargets "$list"
     if [ ${#targets[@]} -eq 0 ]; then
         exit
     elif [ "$_file" -a ${#targets[@]} -eq 1 ]; then
-        LNUM=$(( $( $GET -r "${opts[@]}" -a -e"${targets[0]}$SEP" |
+        LNUM=$(( $( $GET -r -a -e"${targets[0]}$SEP" "${opts[@]}" |
                     wc -l; testExit ${PIPESTATUS[0]} ) + 1 ))
         edit "$FILE"
         exit
@@ -734,7 +746,7 @@ e)  checkEditor
     makeTemp
     for N in "${targets[@]}"; do
         newTemp TEMP[$N] "$N"
-        $GET -r "${opts[@]}" -f"$N" >"${TEMP[$N]}" || errorExit
+        $GET -r -f"$N" "${opts[@]}" >"${TEMP[$N]}" || errorExit
         HASH[$N]=$(md5sum "${TEMP[$N]}" 2>/dev/null)
     done
     edit "${TEMP[@]}"
@@ -751,7 +763,7 @@ e)  checkEditor
             if [[ "$range" == t* ]]; then
                 cat "${TEMP[${range#t}]}"       >>"$TEMPFILE" || errorExit
             else
-                $GET -r "${opts[@]}" -f"$range" >>"$TEMPFILE" || errorExit
+                $GET -r -f"$range" "${opts[@]}" >>"$TEMPFILE" || errorExit
             fi
         done
         checkWritable
@@ -765,7 +777,7 @@ d)  [ $# -eq 0 ] && exit
     parseRanges -e "$@" || shift $?
     [ $# -gt 0 ] && errorUsage "Invalid argument for $OP: $1"
     makeTemp TEMPFILE
-    $GET -r "${opts[@]}" -a "${popts[@]}" >"$TEMPFILE" || errorExit
+    $GET -r -a "${opts[@]}" "${popts[@]}" >"$TEMPFILE" || errorExit
     checkWritable
     read <"$TEMPFILE"
     if [ "$REPLY" != "$HEAD" ]
@@ -793,12 +805,12 @@ x)  if [[ $# -eq 0 || ! "$1" =~ ^[0-9]+$ ]]
     fi
     checkWritable
     if [ ! "$N" ]; then
-        printf "%s" "$input" >>"$FILE" || errorExit
+        printf "%s\n" "$input" >>"$FILE" || errorExit
     else
         makeTemp TEMPFILE
-        $GET -r "${opts[@]}" -e"$((N+1))$SEP" -a >"$TEMPFILE" || errorExit
-        printf "%s" "$input" >>"$TEMPFILE"
-        $GET -r "${opts[@]}" -e"$SEP$N"         >>"$TEMPFILE" || errorExit
+        $GET -r -a -e"$((N+1))$SEP" "${opts[@]}"  >"$TEMPFILE" || errorExit
+        printf "%s\n" "$input" >>"$TEMPFILE"
+        $GET -r    -e"$SEP$N"       "${opts[@]}" >>"$TEMPFILE" || errorExit
         cp "$TEMPFILE" "$FILE" || errorExit
         cleanUp
     fi
@@ -826,10 +838,10 @@ i|a|s)
         checkWritable
         if [ "$OP" = "i" ]; then
             makeTemp TEMPFILE
-            $GET -r "${opts[@]}" -e"$N$SEP" -a     >"$TEMPFILE" || errorExit
+            $GET -r -a -e"$N$SEP"    "${opts[@]}"  >"$TEMPFILE" || errorExit
             LNUM=$(( $(cat "$TEMPFILE" | wc -l) + 1 ))
             appendTemplate "$TEMPFILE"
-            $GET -r "${opts[@]}" -e"$SEP$((N-1))" >>"$TEMPFILE" || errorExit
+            $GET -r -e"$SEP$((N-1))" "${opts[@]}" >>"$TEMPFILE" || errorExit
             cp "$TEMPFILE" "$FILE" || errorExit
             cleanUp
         else
@@ -838,8 +850,6 @@ i|a|s)
         fi
         edit "$FILE"
         exit
-    else
-        unset input
     fi
 
     if [ "$OP" = "a" ]; then
@@ -850,7 +860,7 @@ i|a|s)
     fi
     if [ "${input+set}" ]; then
         appendDelim "$TEMPFILE"
-        printf "%s" "$input" >>"$TEMPFILE"
+        printf "%s\n" "$input" >>"$TEMPFILE"
     else
         appendTemplate "$TEMPFILE"
         edit "$TEMPFILE"
@@ -859,9 +869,9 @@ i|a|s)
         [ "$OP" = "s" ] && getIndex "$TEMPFILE"
         checkWritable
         if [[ "$OP" == [is] ]]; then
-            $GET -r "${opts[@]}" -e"$SEP$((N-1))" >>"$TEMPFILE" || errorExit
+            $GET -r -e"$SEP$((N-1))" "${opts[@]}" >>"$TEMPFILE" || errorExit
             newTemp NEWFILE
-            $GET -r "${opts[@]}" -e"$N$SEP" -a >"$NEWFILE" || errorExit
+            $GET -r -a -e"$N$SEP" "${opts[@]}" >"$NEWFILE" || errorExit
             cp "$NEWFILE" "$FILE" || errorExit
         fi
         insertMsg() {
@@ -887,7 +897,7 @@ c)  [ $# -gt 0 ] && errorUsage
     echoc red -n "clear $_LOG? " && read
     if [[ "$REPLY" == [Yy]* ]]; then
         makeTemp TEMPFILE
-        $GET -r "${opts[@]}" -f0 >"$TEMPFILE" || errorExit
+        $GET -r -f0 "${opts[@]}" >"$TEMPFILE" || errorExit
         checkWritable
         cp "$TEMPFILE" "$FILE" || errorExit
         cleanUp
