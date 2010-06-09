@@ -691,16 +691,16 @@ getIndex() {
 
 # main
 if [[ "$OP" == [mp] ]]; then
-    [ "$OP" = "p" ]   && popts+=(--blank-line)
-    [ ! "$_no_wrap" ] && popts+=(--wrap=$COLUMNS)
+    [ "$OP" = "p" -a -n "$DELIM" ] && popts+=(--blank-line)
+    [ ! "$_no_wrap" ]              && popts+=(--wrap=$COLUMNS)
 fi
 if [[ "$OP" == [mpo] ]]; then
-    [ ! "$_no_numb" ] && popts+=(-n ' ')
-    [ "$_canonical" ] && popts+=(--canonical)
+    [ ! "$_no_numb" ]              && popts+=(-n ' ')
+    [ "$_canonical" ]              && popts+=(--canonical)
 fi
 if [[ "$OP" == [mpoe] ]]; then
     parseModeline
-    (( TS != 8 ))     && popts+=(--tabs=$TS)
+    (( TS != 8 ))                  && popts+=(--tabs=$TS)
 fi
 unset input
 
