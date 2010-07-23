@@ -2,7 +2,7 @@
 ! type log &>/dev/null && return 1
 
 # repository for log files
-export LOG_DIR="$HOME/documents/txt"
+export LOG_DIR="$HOME/doc/txt"
 
 # external editors
 #export EDITOR=vim

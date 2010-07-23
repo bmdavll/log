@@ -423,6 +423,7 @@ if [ ! "$OP" ]; then
 fi
 
 DELIM="${SPECS##* }"
+DELIM="${DELIM%$'\r'}"
 if [[ "$DELIM" =~ ^[^[:alnum:]]+1?$ ]]; then
     _DELIM=$(echo "$DELIM" | perl -ne 'chomp; print quotemeta')
     opts+=(-d "$_DELIM")
