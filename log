@@ -55,12 +55,12 @@ local SPCS=$(printf '%*s' ${#PROG} '')
 cat << -EOF-
 Usage: $PROG  [FILE]  ...
 Operation:    $SPCS                           Parameters:
-       $SPCS  m | p[fl] | o[fl] | c | e[fl]   [RANGE]...  [[$NOT]PATTERN]...
+       $SPCS  r | p[fl] | o[fl] | c | e[fl]   [RANGE]...  [[$NOT]PATTERN]...
        $SPCS  d                               [RANGE: [+-]N | N- | N-M ]...
        $SPCS  x | i                       [N] [LINE|-]
        $SPCS  a | s                           [LINE|-]
        $SPCS  n[DELIM]  FILE                  [LINE|-]
-       $SPCS  l | r | h
+       $SPCS  l | m | h
 -EOF-
 [ "$1" = "-v" ] && echo "
 Options: [--help] [-wnc] [-i] [-a] [-f] [-e] [-q]"
@@ -87,7 +87,7 @@ ignored. If DELIM is not specified, comments and blank lines are \
 associated with the previous non-blank line.
 
 DEFAULT specifies a default operation for the file; it may be any of the \
-operations listed below except [dncr]. Additionally, it may be \"i-\", \
+operations listed below except [dnlm]. Additionally, it may be \"i-\", \
 \"a-\", or \"s-\" for adding an entry using input from stdin. The default \
 operation in the absence of DEFAULT is \"p\".
 
@@ -116,7 +116,7 @@ specify only the first or last matching entry, respectively.
 
 The possible operations are:
 
-  m           print a random entry
+  r           print a random entry
   p[fl]       print all selected entries
   o[fl]       print a one-line summary for each entry
   c           count the total number of selected entries
@@ -140,7 +140,7 @@ instead of \"e\".
   s           insert an entry in sorted order
               i.e. before the first entry that sorts lexicographically after
   n[DELIM]    create a new FILE in \$LOG_DIR, with optional DELIM
-  l   r       clear/remove FILE
+  l   m       clear/remove FILE
   h           print the usage string
 
 For the operations [iasxn], the rest of the command line, if present, will \
@@ -307,7 +307,7 @@ getOp() {
     if [ "$1" = "h" ]; then
         printUsage -v
         exit 0
-    elif [[ "$1" == [mpocedxiasnlr] ]]; then
+    elif [[ "$1" == [rpocedxiasnlm] ]]; then
         OP="$1"
         _edit_all=1
     elif [[ "$1" =~ ^([poe])([fl])$ ]]; then
@@ -375,7 +375,7 @@ else
         if [[ "$1" == */*               ||
               -f "$LOG_DIR/$1"          ||
               -f "$1"                   ||
-              $# -gt 0 && "$OP" == [lr] ]]
+              $# -gt 0 && "$OP" == [lm] ]]
 
         then LOG="$1" && shift
         else LOG="$PROG"
@@ -409,7 +409,7 @@ fi
 
 SPECS="${HEAD:${#HEADER}}"
 if [ ! "$OP" ]; then
-    if [[ "$SPECS" =~ \ ([mcxh]|[poe][fl]?|[ias]-?)( |$) ]]; then
+    if [[ "$SPECS" =~ \ ([rcxh]|[poe][fl]?|[ias]-?)( |$) ]]; then
         case "${BASH_REMATCH[1]}" in
         ?-) getOp "${BASH_REMATCH[1]:0:1}"
             [ $# -eq 0 ] && set -- -
@@ -691,15 +691,15 @@ getIndex() {
 }
 
 # main
-if [[ "$OP" == [mp] ]]; then
+if [[ "$OP" == [rp] ]]; then
     [ "$OP" = "p" -a -n "$DELIM" ] && popts+=(--blank-line)
     [ ! "$_no_wrap" ]              && popts+=(--wrap=$COLUMNS)
 fi
-if [[ "$OP" == [mpo] ]]; then
+if [[ "$OP" == [rpo] ]]; then
     [ ! "$_no_numb" ]              && popts+=(-n ' ')
     [ "$_canonical" ]              && popts+=(--canonical)
 fi
-if [[ "$OP" == [mpoe] ]]; then
+if [[ "$OP" == [rpoe] ]]; then
     parseModeline
     (( TS != 8 ))                  && popts+=(--tabs=$TS)
 fi
@@ -707,11 +707,11 @@ unset input
 
 case "$OP" in
 
-m|p|o|c)
+r|p|o|c)
     parseRanges -f "$@" || shift $?
     parsePatterns "$@"
     case "$OP" in
-    m)  $GET "${opts[@]}" "${popts[@]}" -m
+    r)  $GET "${opts[@]}" "${popts[@]}" -m
         ;;
     p)  $GET "${opts[@]}" "${popts[@]}"
         ;;
@@ -907,7 +907,7 @@ l)  [ $# -gt 0 ] && errorUsage
     fi
     ;;
 
-r)  [ $# -gt 0 ] && errorUsage
+m)  [ $# -gt 0 ] && errorUsage
     echoc red -n "remove $_LOG? " && read
     [[ "$REPLY" == [Yy]* ]] && rm "$FILE"
     ;;
