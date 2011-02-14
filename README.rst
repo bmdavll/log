@@ -38,7 +38,7 @@ Print a one-line summary for each of the last 10 entries of the file
 Count the number of entries that contain *foo* but not *bar* on the first
 line::
 
-  log t foo :bar
+  log c foo :bar
 
 Edit the first entry that contains the pattern *bear* anywhere::
 

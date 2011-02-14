@@ -55,14 +55,14 @@ local SPCS=$(printf '%*s' ${#PROG} '')
 cat << -EOF-
 Usage: $PROG  [FILE]  ...
 Operation:    $SPCS                           Parameters:
-       $SPCS  m | p[fl] | o[fl] | t | e[fl]   [RANGE]...  [[$NOT]PATTERN]...
+       $SPCS  m | p[fl] | o[fl] | c | e[fl]   [RANGE]...  [[$NOT]PATTERN]...
        $SPCS  d                               [RANGE: [+-]N | N- | N-M ]...
        $SPCS  x | i                       [N] [LINE|-]
        $SPCS  a | s                           [LINE|-]
        $SPCS  n[DELIM]  FILE                  [LINE|-]
-       $SPCS  c | r | h
+       $SPCS  l | r | h
 -EOF-
-[ "$1" = "h" ] && echo "
+[ "$1" = "-v" ] && echo "
 Options: [--help] [-wnc] [-i] [-a] [-f] [-e] [-q]"
 }
 
@@ -119,7 +119,7 @@ The possible operations are:
   m           print a random entry
   p[fl]       print all selected entries
   o[fl]       print a one-line summary for each entry
-  t           count the total number of selected entries
+  c           count the total number of selected entries
   e[fl]       edit selected entries or (without parameters) the entire file
 
 For \"e\", if more than one matching entry is found, you will be prompted \
@@ -140,7 +140,7 @@ instead of \"e\".
   s           insert an entry in sorted order
               i.e. before the first entry that sorts lexicographically after
   n[DELIM]    create a new FILE in \$LOG_DIR, with optional DELIM
-  c   r       clear/remove FILE
+  l   r       clear/remove FILE
   h           print the usage string
 
 For the operations [iasxn], the rest of the command line, if present, will \
@@ -279,7 +279,7 @@ while [ $# -gt 0 ]; do
     -h*|--help) helpText
                 exit 0
                 ;;
-    -\?)        printUsage h
+    -\?)        printUsage -v
                 exit 0
                 ;;
     --)         shift && break
@@ -305,9 +305,9 @@ LNUM=
 
 getOp() {
     if [ "$1" = "h" ]; then
-        printUsage h
+        printUsage -v
         exit 0
-    elif [[ "$1" == [mpotedxiasncr] ]]; then
+    elif [[ "$1" == [mpocedxiasnlr] ]]; then
         OP="$1"
         _edit_all=1
     elif [[ "$1" =~ ^([poe])([fl])$ ]]; then
@@ -375,7 +375,7 @@ else
         if [[ "$1" == */*               ||
               -f "$LOG_DIR/$1"          ||
               -f "$1"                   ||
-              $# -gt 0 && "$OP" == [cr] ]]
+              $# -gt 0 && "$OP" == [lr] ]]
 
         then LOG="$1" && shift
         else LOG="$PROG"
@@ -409,7 +409,7 @@ fi
 
 SPECS="${HEAD:${#HEADER}}"
 if [ ! "$OP" ]; then
-    if [[ "$SPECS" =~ \ ([mtxh]|[poe][fl]?|[ias]-?)( |$) ]]; then
+    if [[ "$SPECS" =~ \ ([mcxh]|[poe][fl]?|[ias]-?)( |$) ]]; then
         case "${BASH_REMATCH[1]}" in
         ?-) getOp "${BASH_REMATCH[1]:0:1}"
             [ $# -eq 0 ] && set -- -
@@ -707,7 +707,7 @@ unset input
 
 case "$OP" in
 
-m|p|o|t)
+m|p|o|c)
     parseRanges -f "$@" || shift $?
     parsePatterns "$@"
     case "$OP" in
@@ -718,7 +718,7 @@ m|p|o|t)
     o)  $GET "${opts[@]}" "${popts[@]}" --first-line | cut -c -$COLUMNS
         exit ${PIPESTATUS[0]}
         ;;
-    t)  $GET "${opts[@]}" "${popts[@]}" --count
+    c)  $GET "${opts[@]}" "${popts[@]}" --count
         ;;
     esac
     ;;
@@ -894,7 +894,7 @@ i|a|s)
     cleanUp
     ;;
 
-c)  [ $# -gt 0 ] && errorUsage
+l)  [ $# -gt 0 ] && errorUsage
     echoc red -n "clear $_LOG? " && read
     if [[ "$REPLY" == [Yy]* ]]; then
         makeTemp TEMPFILE
