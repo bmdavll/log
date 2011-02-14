@@ -20,11 +20,13 @@
 #   2009-07-23  File created
 #   2009-08-20  Rewrite with improved functionality
 #   2009-09-28  Updated to conform to entries.pl
+#   2011-02-14  Use r and c for random and count, respectively
+#               Updated help
 #
 #########################################################################
 
 PROG=$(basename "$0")
-VERSION="0.8"
+VERSION="1.0"
 
 # default tabstop
 TS=4
@@ -51,19 +53,51 @@ popts=(--preserve)
 [ ! "$COLUMNS" ] && COLUMNS=80
 
 printUsage() {
-local SPCS=$(printf '%*s' ${#PROG} '')
 cat << -EOF-
 Usage: $PROG  [FILE]  ...
-Operation:    $SPCS                           Parameters:
-       $SPCS  r | p[fl] | o[fl] | c | e[fl]   [RANGE]...  [[$NOT]PATTERN]...
-       $SPCS  d                               [RANGE: [+-]N | N- | N-M ]...
-       $SPCS  x | i                       [N] [LINE|-]
-       $SPCS  a | s                           [LINE|-]
-       $SPCS  n[DELIM]  FILE                  [LINE|-]
-       $SPCS  l | m | h
+
+Operations:                       Parameters:
+  r | p[fl] | o[fl] | c | e[fl]     [RANGE]...   [[$NOT]PATTERN]...
+  d                                 [RANGE]...
+  x | i                             [N]   [LINE|-]
+  a | s                             [LINE|-]
+  n[DELIM]  FILE                    [LINE|-]
+  l | m | h
 -EOF-
-[ "$1" = "-v" ] && echo "
-Options: [--help] [-wnc] [-i] [-a] [-f] [-e] [-q]"
+if [ "$1" = "-v" ]; then
+local SP=$(printf '%*s' $((${#NOT}-1)) '')
+cat << -EOF-
+
+    r  random       e  edit      i  insert before    n  new
+    p  print all    d  delete    a  append           l  clear
+    o  one-line     x  extend    s  sorted insert    m  remove
+    c  count                                         h  help
+
+                 RANGE:
+    $NOT  not         +N  first N    N-   from N
+    -$SP  stdin       -N  last N     N-M  from N to M
+
+-EOF-
+printOptions
+fi
+}
+printOptions() {
+cat << -EOF-
+Options:
+  -h, --help  print this help message and exit
+  -w          do not wrap entries at $COLUMNS
+  -n          do not number entries
+  -c          canonically number entries starting from 1
+  -i          ignore case when matching PATTERN's
+  -a          all:
+              use entire entries, including comments, for searching/sorting
+              the alternative is to use only the first non-blank line
+  -f          edit entries with context:
+              edit FILE itself when adding or editing a single entry
+              open FILE concurrently if editing multiple entries
+  -e          use alternate editor \$LOG_EDITOR (${LOG_EDITOR:-not set})
+  -q          suppress informative messages
+-EOF-
 }
 
 helpText() {
@@ -149,20 +183,7 @@ should be read from stdin. If neither is present, the default action for \
 the operations [ias] is to launch \$EDITOR (${EDITOR:-not set}); for \
 \"x\", to read input from stdin; and for \"n\", to exit after file creation.
 
-Options:
-  -h, --help  print this help message and exit
-  -w          do not wrap entries at $COLUMNS
-  -n          do not number entries
-  -c          canonically number entries
-  -i          ignore case when matching PATTERN's
-  -a          all:
-              use entire entries, including comments, for searching/sorting
-              the alternative is to use only the first non-blank line
-  -f          edit entries with context:
-              edit FILE itself when adding or editing a single entry
-              open FILE concurrently if editing multiple entries
-  -e          use alternate editor \$LOG_EDITOR (${LOG_EDITOR:-not set})
-  -q          quiet (suppress informative messages)
+$(printOptions)
 
 " | fold -sw $COLUMNS
 }
