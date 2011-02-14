@@ -19,14 +19,14 @@
 wotd() {
     local LOG=log
     if [ $# -eq 0 ]; then
-        $LOG -w wotd m | _wotd_highlight
+        $LOG -w wotd r | _wotd_highlight
         return ${PIPESTATUS[0]}
     elif [ $# -eq 1 ]; then
         case "$1" in
-        m|p|p[fl])  $LOG -w wotd "$1" | _wotd_highlight
+        r|p|p[fl])  $LOG -w wotd "$1" | _wotd_highlight
                     return ${PIPESTATUS[0]}
                     ;;
-        [otexias]|[oe][fl]|-*)
+        [ocexias]|[oe][fl]|-*)
                     $LOG wotd "$1"
                     ;;
         *)          $LOG -w wotd p "$1" | _wotd_highlight

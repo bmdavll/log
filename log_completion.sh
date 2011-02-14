@@ -37,7 +37,7 @@ complete -F _log_alias todo
 _log() {
     [ ! -d "$LOG_DIR" ] && return 1
     local LOG=log NBSP=' ' DBSP="$NBSP$NBSP"
-    local cur="$2" ops='m p pf pl o of ol t e ef el d x i a s n c r h'
+    local cur="$2" ops='r p pf pl o of ol c e ef el d x i a s n l m h'
     local i arg no_opt argv=() op file output compreply=() choices compfiles
     unset COMP_WORDS[0]
     for i in $(seq $COMP_CWORD ${#COMP_WORDS[@]}); do
@@ -101,7 +101,7 @@ _log() {
     [ ! -f "$LOG_DIR/$file" -a ! -f "$file" ] && break
     if [[ $# -eq 0 && "$op" == [asn] || $# -eq 1 && "$op" == [xi] ]]; then
         compreply=(-)
-    elif [[ "$op" == [mpot] ]]; then
+    elif [[ "$op" == [rpoc] ]]; then
         __log_print "$file"
     elif [[ "$op" != [edxi] || $# -ge 2 && "$op" == [xi] ]] ||
         __log_print "$file"
@@ -129,7 +129,7 @@ _log() {
 
 # helper functions
 __log_op() {
-    if [[ "$1" == [mpotedxiasncrh] || "$1" == [poe][fl] ]]; then
+    if [[ "$1" == [rpocedxiasnlmh] || "$1" == [poe][fl] ]]; then
         op="${1:0:1}"
     elif [[ "$1" =~ ^n[^[:alnum:]]+$ ]]; then
         op="n"
