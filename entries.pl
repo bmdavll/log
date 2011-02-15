@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-#########################################################################
+#####################################################################{{{1
 #
 #   Copyright 2009 David Liang
 #
@@ -18,15 +18,17 @@
 #
 #   Revisions:
 #   2009-09-20  File created
+#   2011-02-15  Added documentation
 #
 #########################################################################
+#{{{1 initialization
 use strict;
 use warnings;
 use File::Basename qw(basename);
 use Getopt::Long;
 
 my $PROG = basename($0);
-my $VERSION = '0.8';
+my $VERSION = '1.0';
 my $SEP = ':';
 
 BEGIN {
@@ -41,12 +43,12 @@ BEGIN {
     $SIG{__DIE__}  = sub { print STDERR errorFormat(@_); exit 1 };
 }
 
-# options
+#{{{1 options
 Getopt::Long::Configure
     qw(gnu_getopt no_gnu_compat no_auto_abbrev no_ignore_case);
 
+#{{{2 help functions
 sub Interpolate {
-    my ($SPC, $PSPC) = (' ', ' ' x length($PROG));
     my $doc = join('', @_);
     $doc =~ s/\\\n//g;
     $doc =~ s/\*(\w+)\*/$1/g;
@@ -80,35 +82,34 @@ sub Usage {
     );
     seek USAGE, 0, 0;
     @message = <USAGE>;
-    $verbose = 'Usage:';
-    if (@message >= 2 and $message[0] =~ /^$verbose$/) {
-        shift @message;
-        $message[0] =~ s/^\s{6}/$verbose/;
-    }
     print $OUT Interpolate(@message);
     exit $exitval;
 }
 
+#{{{2 variables
 my (
     $ignore_case,
     $sort,
     $extract,
     $canonical,
-    $blank,
+    $separator,
+    $tabs,
     $wrap,
 );
 my %opts = (
+    'fixed' => [],
+    'except' => [],
     'grep' => [],
     'grep-not' => [],
     'ignore-case' => \$ignore_case,
-    'fixed' => [],
-    'except' => [],
     'sort' => \$sort,
     'extract' => \$extract,
     'canonical' => \$canonical,
-    'blank-line' => \$blank,
+    'separate-entries' => \$separator,
+    'tabs' => \$tabs,
     'wrap' => \$wrap,
 );
+#}}}
 GetOptions(
     \%opts,
     'man',
@@ -118,13 +119,13 @@ GetOptions(
     'comment|c=s',
     'encoding=s',
 
-    'grep|g=s',
-    'grep-not|G=s',
-    'ignore-case|i',
-    'one-line|o',
     'all|a',
     'fixed|f=s',
     'except|e=s',
+    'grep|g=s',
+    'grep-not|G=s',
+    'ignore-case|i',
+    'only-first|o',
     'random|m',
     'sort|s:s',
     'extract=s',
@@ -135,7 +136,7 @@ GetOptions(
     'n:s',
     'number:s',
     'canonical|C',
-    'blank-line',
+    'separate-entries:s',
     'preserve|p',
     'raw|r',
     'first-line|F',
@@ -144,16 +145,16 @@ GetOptions(
     'list',
     'count',
 ) or Usage(2, 0);
-
-# process options
-Usage(0, 2) if $opts{man};
+Usage(0, 2)                        if $opts{man};
 Usage(0, 1, $PROG, '  ', $VERSION) if $opts{help};
-Usage(0, 0) if $opts{usage};
+Usage(0, 0)                        if $opts{usage};
 
+#{{{1 process options
 sub argError {
     Usage(2, 0, 'Invalid argument for option ', shift, ': ', shift);
 }
 
+#{{{2 delimiter
 my ($delimited, $re_delim);
 if (defined $opts{delimiter}) {
     $delimited = 1;
@@ -164,6 +165,7 @@ if (defined $opts{delimiter}) {
     $re_delim = qr[\S];
 }
 
+#{{{2 comment
 my ($re_comment,
     $re_comment_s,
     $re_comment_line,
@@ -179,6 +181,7 @@ if (defined $opts{comment}) {
     die $@ if $@;
 }
 
+#{{{2 search
 $ignore_case = ($ignore_case ? 'i' : '');
 
 my @grep;
@@ -192,12 +195,7 @@ if (@{$opts{'grep-not'}}) {
     die $@ if $@;
 }
 
-if ($opts{all}) {
-    unshift @{$opts{fixed}}, '0:';
-} elsif (not @{$opts{fixed}}) {
-    unshift @{$opts{fixed}}, '1:';
-}
-
+#{{{2 sort
 if (defined $sort) {
     if ($opts{random} or $opts{count}) {
         undef $sort;
@@ -215,21 +213,31 @@ if (defined $sort) {
     }
 }
 
+#{{{2 other
+if ($opts{all}) {
+    unshift @{$opts{fixed}}, '0:';
+} elsif (not @{$opts{fixed}}) {
+    unshift @{$opts{fixed}}, '1:';
+}
+
+if (defined $separator) {
+    $separator .= "\n";
+}
+
 $opts{preserve} = 1 if $opts{raw};
 
-my $ts = (defined $opts{tabs} ? $opts{tabs} : 8);
-argError('tabs', $ts) if $ts <= 0;
+argError('tabs', $tabs) if defined $tabs and $tabs <= 0;
 argError('wrap', $wrap) if defined $wrap and $wrap <= 0;
+#}}}
 
-# main
+#{{{1 slurp entries
 if (not @ARGV) {
     Usage(1, 0, 'No files given') if -t STDIN;
     @ARGV = '-';
 }
-my $tmp;
 
-# slurp entries
 my (@entries, $entry);
+my $tmp;
 
 foreach (@ARGV) {
     my $file;
@@ -270,8 +278,8 @@ if (@entries) {
     unshift @entries, undef if $tmp =~ /$re_delim/;
 }
 
-# determine included and excluded entries
-sub convertIndex {
+#{{{1 determine included and excluded entries
+sub convertIndex { #{{{2
     $_ = shift;
     if (/^-/) {
         return  0 if $_ == 0;
@@ -281,13 +289,13 @@ sub convertIndex {
     } else {
         return int($_);
     }
-}
+} #}}}
 sub min { return $_[0] < $_[1] ? $_[0] : $_[1] }
 sub max { return $_[0] > $_[1] ? $_[0] : $_[1] }
 
 my $re_range = qr[^(-?\d+)?($SEP)?(-?\d+)?$];
 
-sub parseList {
+sub parseList { #{{{2
     my ($type, $href) = @_;
     my ($l_thresh, $u_thresh);
     foreach ( grep { $_ ne '' }
@@ -333,7 +341,7 @@ sub parseList {
     }
     return (defined $l_thresh ? max($l_thresh, 1)         : undef),
            (defined $u_thresh ? min($u_thresh, $#entries) : undef);
-}
+} #}}}
 my (%fixed, %except);
 
 my ($excpt_l_thresh, $excpt_u_thresh) = parseList 'except', \%except;
@@ -361,7 +369,7 @@ if (not defined $fixed_u_thresh) {
     $fixed_u_thresh = 0;
 }
 
-sub skip {
+sub skip { #{{{2
     $_ = shift;
     if ($_ == 0) {
         return 0 if $fixed{0} and defined $entries[0];
@@ -371,30 +379,46 @@ sub skip {
                  $_ <= $fixed_u_thresh or $fixed{$_})
                 and not $except{$_};
     return 1;
-}
+} #}}}
 
-# get selected indices
+#{{{1 get/sort selected indices
 # search entries
 my $ops = 0;
 
-my $S_DELIM = 1<<0;
-my $S_COMMT = 1<<1;
-my $S_FIRST = 1<<2;
-
-my $grep_or_sort = (@grep or defined $vgrep or defined $sort);
-
-if ($grep_or_sort and $opts{'one-line'}) {
-    $ops|= $S_DELIM if $delimited;
-    $ops|= $S_COMMT if defined $opts{comment};
-    $ops|= $S_FIRST;
-}
 my $re_first_line = qr[(?:\s*\n|^)([^\n]*).*]s;
 my $re_blank_line = qr[(?:\n|^)\K\s*\n];
 
 my @indices;
 my %entries;
+#{{{2 fill cache
+if (@grep or defined $vgrep or defined $sort) {
+    my $S_DELIM = 1<<0;
+    my $S_COMMT = 1<<1;
+    my $S_FIRST = 1<<2;
 
-if (not $grep_or_sort) {
+    $ops|= $S_DELIM if $delimited;
+    $ops|= $S_COMMT if $opts{'only-first'} and defined $opts{comment};
+    $ops|= $S_FIRST if $opts{'only-first'};
+
+    push @indices, 0 if not skip(0);
+    LOOP: for my $i ($excpt_u_thresh+1..$#entries) {
+        next if skip($i);
+
+        my $srch = $entries[$i];
+        $srch =~ s/$re_delim//        if $ops & $S_DELIM;
+        $srch =~ s/$re_comment//g     if $ops & $S_COMMT;
+        $srch =~ s/$re_first_line/$1/ if $ops & $S_FIRST;
+
+        foreach (@grep) {
+            next LOOP if ($srch !~ /$_/);
+        }
+        next if defined $vgrep and $srch =~ /$vgrep/;
+        push @indices, $i;
+        $entries{$i} = \$srch if defined $sort;
+    }
+
+} else {
+    # no grep or sort
     if ( (keys %except == 0 or keys %except == 1 and $except{0}) and
          (keys %fixed  == 0 or keys %fixed  == 1 and $fixed{0} or
           $fixed_l_thresh == 1 or $fixed_u_thresh == $#entries) ) {
@@ -413,40 +437,14 @@ if (not $grep_or_sort) {
             push @indices, $i if not skip($i);
         }
     }
-} elsif (not $ops) {
-    push @indices, 0 if not skip(0);
-    LOOP: for my $i ($excpt_u_thresh+1..$#entries) {
-        next if skip($i);
-        foreach (@grep) {
-            next LOOP if ($entries[$i] !~ /$_/);
-        }
-        next if defined $vgrep and $entries[$i] =~ /$vgrep/;
-        push @indices, $i;
-        $entries{$i} = \$entries[$i] if defined $sort;
-    }
-} else {
-    push @indices, 0 if not skip(0);
-    LOOP: for my $i ($excpt_u_thresh+1..$#entries) {
-        next if skip($i);
-        my $srch = $entries[$i];
-        $srch =~ s/$re_delim//    if $ops & $S_DELIM;
-        $srch =~ s/$re_comment//g if $ops & $S_COMMT;
-        $srch =~ s/$re_first_line/$1/;
-        foreach (@grep) {
-            next LOOP if ($srch !~ /$_/);
-        }
-        next if defined $vgrep and $srch =~ /$vgrep/;
-        push @indices, $i;
-        $entries{$i} = \$srch if defined $sort;
-    }
 }
+#}}}
 my $max_index = $indices[$#indices];
 
 # temporarily ignore entry zero
 shift @indices if not skip(0);
 
-# choose random, first, or last
-# sort
+#{{{2 choose random, first, or last; sort
 if (@indices) {
     my @chosen;
     if ($opts{random}) {
@@ -470,7 +468,7 @@ if (@indices) {
     }
 }
 
-# print count
+#{{{1 print count/list
 if ($opts{count}) {
     print scalar(@indices), "\n";
     exit;
@@ -479,14 +477,14 @@ if ($opts{count}) {
 unshift @indices, 0 if not skip(0);
 exit if not @indices;
 
-# print list
 if ($opts{list}) {
     local ($,, $\) = ("\n", "\n");
     print @indices;
     exit;
 }
 
-# strip delimiters, comments, lines after the first, and blank lines
+#{{{1 print formatting
+#{{{2 strip delimiters, comments, lines after the first, and blank lines
 $ops = 0;
 
 my $E_DELIM = 1<<0;
@@ -513,15 +511,16 @@ if ($ops) {
   }
 }
 
-# expand tabs
-if ($opts{tabs} or $wrap) {
+#{{{2 expand tabs
+if ($tabs or $wrap) {
+    $tabs = 8 if not defined $tabs;
     my $re_tabs = qr[\G((?:[^\t\n]*\n)*)([^\t]*)(\t+)];
     $entries[$_] =~ s[$re_tabs]
-                     [$1.$2.' 'x(length($3) * $ts - length($2) % $ts)]ge
+                     [$1.$2.' 'x(length($3) * $tabs - length($2) % $tabs)]ge
     foreach @indices;
 }
 
-# format number or bullet
+#{{{2 format number or bullet
 my ($number, $pre, $suf, $pad, $format, $count);
 
 if (defined $opts{N} or defined $opts{n} or defined $opts{number}) {
@@ -557,16 +556,19 @@ if (defined $opts{N} or defined $opts{n} or defined $opts{number}) {
     $pad = 0;
 }
 
-# parameters for wrap
+#{{{2 parameters for wrap
 my ($lim, $lim_1, $lim_2, $wrapped);
+
 if ($wrap) {
     $lim_1 = max($wrap - 1, $pad + 1);
     $lim_2 = $lim_1 - $pad;
 }
+
 $pad = ' ' x $pad;
 
-# print entries
+#{{{1 print entries
 binmode STDOUT, ':encoding('.$opts{encoding}.')' if defined $opts{encoding};
+
 foreach (@indices) {
     if ($format) {
         $entry = sprintf $format, $pre.( $number ? $canonical ? ++$count
@@ -575,7 +577,7 @@ foreach (@indices) {
         $entry .= $entries[$_];
         $entry =~ s/\n\K/$pad/g;
         $entry =~ s/$pad$//;
-        $entry .= "\n" if $blank and $entry !~ /\n\n$/;
+        $entry .= $separator if $separator and $entry !~ /\n\n$/;
     } else {
         $entry = $entries[$_];
     }
@@ -600,6 +602,7 @@ foreach (@indices) {
     }
 }
 
+#{{{1 documentation
 __END__
 
 =head1 NAME
@@ -608,10 +611,17 @@ $PROG - extraction of lines or sections from text files
 
 =head1 SYNOPSIS
 
-   $PROG
-   $PSPC
+$PROG  I<FILE>...
 
 =head1 DESCRIPTION
+
+This script reads text from files on the command line or from I<stdin>,
+parsing the text into entries. Each entry begins with either a single
+non-blank line that is not a comment, or, if the B<-d> option is specified,
+with a delimiter located at the start of a line. An entry spans the stretch
+of text up to the start of the next entry. The entries can be selected,
+searched, sorted, and formatted for output to I<stdout> according to the
+following options.
 
 =head1 OPTIONS
 
@@ -619,9 +629,15 @@ $PROG - extraction of lines or sections from text files
 
 =item B<--man>
 
+display the man page
+
 =item B<-h>, B<--help>
 
+print help message
+
 =item B<-?>, B<--usage>
+
+print usage string
 
 =item
 
@@ -629,37 +645,81 @@ $PROG - extraction of lines or sections from text files
 
 =item B< >B< >B<-d> I<DELIM>, B<--delimiter> I<DELIM>
 
+use regex I<DELIM> to mark sections as entries (otherwise, each non-blank
+line is treated as an entry)
+
 =item B< >B< >B<-c> I<STR>, B<--comment> I<STR>
 
+parse comments, which start with regex I<STR> and go to the end of the line
+
 =item B< >B< >B<--encoding> I<NAME>
+
+specify the file encoding
 
 =item
 
 =item B<Entry selection>
 
+=item B< >B< >B<-a>, B<--all>
+
+select all entries (including entry 0, before the first I<DELIM>); by
+default, only entries starting from 1 are selected
+
+=item B< >B< >B<-f> I<LIST>, B<--fixed> I<LIST>
+
+select a subset of entries numerically
+
+I<LIST> is a comma-separated list of I<RANGE>s, where each I<RANGE> may be
+one of:
+
+  N${SEP}M  entries N to M
+  ${SEP}M   entries 1 to M
+  N${SEP}   entry N to the last entry
+
+I<RANGE>s are inclusive; numbers I<N> and I<M> may be negative for indexing
+from the end
+
+=item B< >B< >B<-e> I<LIST>, B<--except> I<LIST>
+
+exclude entries numerically
+
 =item B< >B< >B<-g> I<PATTERN>, B<--grep> I<PATTERN>
 
 =item B< >B< >B<-G> I<PATTERN>, B<--grep-not> I<PATTERN>
 
+grep for entries containing (or not containing) I<PATTERN>, from among the
+selected entries
+
 =item B< >B< >B<-i>, B<--ignore-case>
 
-=item B< >B< >B<-o>, B<--one-line>
+ignore case for searches
 
-=item B< >B< >B<-a>, B<--all>
+=item B< >B< >B<-o>, B<--only-first>
 
-=item B< >B< >B<-f> I<LIST>, B<--fixed> I<LIST>
-
-=item B< >B< >B<-e> I<LIST>, B<--except> I<LIST>
+use only the first non-blank line in an entry (ignoring comments) for
+searching and sorting
 
 =item B< >B< >B<-m>, B<--random>
 
-=item B< >B< >B<-s> [I<COMMAND>], B<--sort> [I<COMMAND>]
+choose a random entry from among the matching entries
 
-=item B< >B< >B<--extract> I<COMMAND>
+=item B< >B< >B<-s> [I<EXPR>], B<--sort> [I<EXPR>]
+
+sort entries using a Perl expression I<EXPR> ('\$a cmp \$b' by default),
+which compares two representative keys, denoted by '\$a' and '\$b', and
+return a numeric result
+
+=item B< >B< >B<--extract> I<EXPR>
+
+specify an I<EXPR> to extract a key from each entry (stored in '\$_') for
+use by the sort function; e.g. --sort '\$a <=> \$b' --extract '\$_ =~
+/(\\d+)/' will sort entries numerically by the first number found in each
 
 =item B< >B< >B<--first>
 
 =item B< >B< >B<--last>
+
+select only the first or last result
 
 =item
 
@@ -671,26 +731,48 @@ $PROG - extraction of lines or sections from text files
 
 =item B< >B< >B<--number> [I<FORMAT>]
 
+number entries, optionally with a I<PREFIX> or I<SUFFIX> attached, or using
+a I<FORMAT> string, in which '%d', if present, represents the entry number
+
 =item B< >B< >B<-C>, B<--canonical>
 
-=item B< >B< >B<--blank-line>
+number resultant entries sequentially, starting from 1, and not by entry
+index
+
+=item B< >B< >B<--separate-entries> [I<STR>]
+
+separate entries with I<STR> followed by a newline
 
 =item B< >B< >B<-p>, B<--preserve>
 
+do not strip comments and blank lines from the output
+
 =item B< >B< >B<-r>, B<--raw>
+
+like B<--preserve>, but also leaves delimiters in place
 
 =item B< >B< >B<-F>, B<--first-line>
 
+only print the first line of each entry
+
 =item B< >B< >B<-t> [I<NUM>], B<--tabs> [I<NUM>]
+
+expand tabs to I<NUM> spaces (8 by default)
 
 =item B< >B< >B<-w> [I<NUM>], B<--wrap> [I<NUM>]
 
+wrap text at I<NUM> columns (by default, \$COLUMNS or 80)
+
 =item B< >B< >B<--list>
 
+only print a list of indices for matching entries, one per line
+
 =item B< >B< >B<--count>
+
+only count and print the number of matching entries
 
 =back
 
 =cut
 
-=for vim:set ts=4 sw=4 et:
+=for vim:set ts=4 sw=4 et fdm=marker:
