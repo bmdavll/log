@@ -1,6 +1,5 @@
 #!log vim:set fdm=marker fmr=◘,◘ ts=4 ai tw=75 ft=: ◘1
-◘1 09/04 Fri | log
-◘1 09/05 Sat | example
+◘1 09/04 Fri | log example
 ◘1 2009-09-05 | an entry
 # comment
 [todo]  ⇐ if using Vim, use 'gf' on the word to jump to the file

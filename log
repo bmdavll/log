@@ -107,10 +107,11 @@ Command-line interface for displaying and managing text logs.
 
 $(printUsage)
 
-A FILE may be specified immediately after \"$PROG\" or after the \
-operational keyword. If not present, it defaults to \"$PROG\". FILE is a \
-text file in \$LOG_DIR (${LOG_DIR:-not set}) or a path to a text file, the \
-first line of which should conform to this format:
+A \"$PROG\" command consists of a keyword for the operation followed by \
+the parameters, if any. A FILE may be specified immediately after \
+\"$PROG\" or after the operational keyword. If not present, it defaults to \
+\"$PROG\". FILE is a text file in \$LOG_DIR (${LOG_DIR:-not set}) or a \
+path to a text file, the first line of which should conform to this format:
 
   $HEADER [MODELINE] [template:N] [DEFAULT] [DELIM]
 
@@ -143,7 +144,7 @@ Where allowed, each RANGE selects one or more entries as follows (N, M ≥ 0):
 
 For certain operations, PATTERN limits entries to those whose first lines \
 contain the Perl regular expression PATTERN. If PATTERN is preceded by \
-'$NOT', select entries that do NOT match the pattern.
+'$NOT', only entries that do NOT match the pattern are selected.
 
 For the operations [poe], the letters \"f\" and \"l\" may be appended to \
 specify only the first or last matching entry, respectively.
@@ -314,7 +315,7 @@ done
 
 set -- "${argv[@]}" "$@"
 
-[ ! "$_all" ] && opts+=(--one-line)
+[ ! "$_all" ] && opts+=(--only-first)
 
 [[ "$EXTERN" == *vim* ]] && _vim=1
 
@@ -713,7 +714,7 @@ getIndex() {
 
 # main
 if [[ "$OP" == [rp] ]]; then
-    [ "$OP" = "p" -a -n "$DELIM" ] && popts+=(--blank-line)
+    [ "$OP" = "p" -a -n "$DELIM" ] && popts+=(--separate-entries)
     [ ! "$_no_wrap" ]              && popts+=(--wrap=$COLUMNS)
 fi
 if [[ "$OP" == [rpo] ]]; then

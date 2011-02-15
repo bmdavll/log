@@ -1,6 +1,6 @@
 $ time entries.pl.sh >entries.pl.out
 
-0m34.143s	97.06%
+0m43.433s       94.92%
 
 $ sha1sum *
 86c353304ab2d1acaa80e893e005dfa4c25882f9  Makefile
@@ -10,9 +10,9 @@ d83d9eee6117684005877955ee519e0aa3acb848  delim.1.inp
 82d7f6b949eb2dfb00173f443ce44fc3fa226f25  delim.2.inp
 f75e7534d0b16dec2821fe1500ecdadf95b6224f  delim.inp
 da39a3ee5e6b4b0d3255bfef95601890afd80709  empty.inp
-d705902a5baf5b60f361830e4dca0878c8b3b25a  entries.pl.out
-5e70c8d53c108afada89f384c358a90b60a60fdf  gentest.sh
-2e205e4aa82ee372cc01fa581717281ae0d0ff71  inspect.sh
+f6e7e57af5e5ccbdc246b31094145946c50f224a  entries.pl.out
+74b00add48eb3190cba58975290afc1bcfc8f860  gentest.sh
+c09bd9673c941043d342f045b5f7806d1d65f829  inspect.sh
 b5962dbd22d7c070879a5f9278fb8d2686eabae6  lines.0.inp
 6dbc368f33ea530a5e22c882bc2ecc8a4bc08ae7  lines.1.inp
 954a52e032bf94cf46cd94edd110f32d2b5e02d7  lines.2.inp

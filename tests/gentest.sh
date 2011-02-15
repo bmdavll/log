@@ -81,7 +81,7 @@ for i in $(seq 1 $tests); do
             esac
             ;;
         6)  case $c in
-            1)  opts+=(-p -t4 --blank-line)
+            1)  opts+=(-p -t4 --separate-entries)
                 ;;
             2)  opts+=(--list)
                 ;;

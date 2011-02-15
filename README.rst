@@ -1,6 +1,6 @@
-===
-LOG
-===
+========
+LOG v1.0
+========
 
 --------------------------------------------------------------
 A command-line interface for displaying and managing text logs
@@ -8,18 +8,18 @@ A command-line interface for displaying and managing text logs
 
 ``log`` is a utility that allows you to easily access, print, search, and
 edit your text logs and notes.  There are several graphical applications
-(such as GNOME's Tomboy) for managing notes/stickies.  However, if you do a
-lot of work on the command line or have a preferred text editor, they can
-feel counterproductive or limiting.  ``log`` is the command-line alternative
-that combines a simple and intuitive interface with the power and
-flexibility of your favorite editor.
+(such as GNOME's Tomboy) for managing notes/stickies.  However, if you do
+a lot of work on the command line or have a preferred text editor, graphical
+apps just don't cut it.  ``log`` is the command-line alternative that
+combines a simple and intuitive interface with the power and flexibility of
+your favorite editor.
 
 Files managed by this utility start with the header ``#!log`` and consist of
-either delimited entries or regular lines, with comments marked by ``#``.  A
-command consists of an optional file argument and a keyword (usually a
-single letter) for the operation.  The file argument names a file within the
-directory named by the ``$LOG_DIR`` environment variable, or relative or
-absolute path to an existing log file.  Some examples:
+either delimited entries or regular lines, with comments marked by ``#``.
+A command consists of an optional file argument and a keyword (usually
+a single letter) for the operation.  The file argument names a file found
+within the directory set by the ``$LOG_DIR`` environment variable, or
+a relative or absolute path to an existing log file.  Some examples:
 
 To print the default log::
 
@@ -31,7 +31,7 @@ and *baz* on the first line::
   log pl -i "foo.*bar" "baz"
 
 Print a one-line summary for each of the last 10 entries of the file
-``foo/bar`` under ``$LOG_DIR``::
+``foo/bar`` in ``$LOG_DIR``::
 
   log foo/bar o -10
 
@@ -42,11 +42,11 @@ line::
 
 Edit the first entry that contains the pattern *bear* anywhere::
 
-  log ef bear -s
+  log ef bear -a
 
 Print a random entry from the ``recipes`` log::
 
-  log recipes m
+  log recipes r
 
 Delete the first 4 lines/entries from the log file ``books`` in your home
 directory::
@@ -70,8 +70,7 @@ Create ``new`` log file in ``$LOG_DIR`` with entries delimited by "``>>``"::
   log n'>>' new
 
 ``log`` is the script that provides the interface, while ``entries.pl`` does
-the text processing.  For documentation, please see ``log --help`` and
-``entries.pl --help``.
+the text processing.
 
 
 Installation
@@ -80,15 +79,14 @@ Installation
 1. Make ``entries.pl`` and ``log`` executable and available in one of your
    ``$PATH`` directories.
 
-2. Edit ``log_completion.sh`` and setup environment variables ``$LOG_DIR``,
-   ``$EDITOR``, and ``$LOG_EDITOR``. If your shell is not ``bash``, setup
-   and export those variables in your shell startup config.
+2. Edit ``log_completion.sh`` and set environment variables ``$LOG_DIR``,
+   ``$EDITOR``, and ``$LOG_EDITOR`` to your preferred values. If your shell
+   is not ``bash``, set and export those variables in your shell's startup
+   config.
 
-3. Add lines to your ``.bashrc`` to source ``log_completion.sh`` and
-   ``rand_completion.sh``::
+3. Add a line to your ``.bashrc`` to source ``log_completion.sh``::
 
     . /path/to/log_completion.sh
-    . /path/to/rand_completion.sh
 
 
 See the ``examples`` directory for example log files and scripts.
@@ -104,18 +102,20 @@ Dependencies
 Usage
 =====
 
-Use ``log h`` to print the usage string.
+For documentation, please see ``log --help`` and ``entries.pl --man``.
+
+Use ``log h`` to print the help message.
 
 ``log`` comes with ``bash`` command-line completion--when in doubt, press
 ``TAB``!
 
-Don't do this; you'll be deleting entries 2 and 4::
+Don't do this--you'll be deleting entries 2 and 4::
 
   log o
   log d 2
   log d 3
 
-Instead, enter the ``d`` commands in reverse, or (a better way)::
+Instead::
 
   log d <TAB>   # to examine the file, then...
   log d 2 3
@@ -153,7 +153,8 @@ fold level::
   [-]1
   Entry 2
 
-To conveniently expand and collapse folds, add this bind to your .vimrc::
+To conveniently expand and collapse folds, add this mapping to your .vimrc
+(uses ``Space`` as an example)::
 
   noremap <silent> <Space> :<C-U>exec 'silent! normal! za'<CR>
 

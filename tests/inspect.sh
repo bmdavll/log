@@ -59,15 +59,19 @@ opts=(-m)
 runTest
 
 test="Grep, case insensitive"
-opts=(-c'#' -g'[FB]oo' -i)
+opts=(-c'#' -g'[FB]oo' -o -i)
 runTest
 
 test="Grep, inverted"
-opts=(-c'#' -g'[fb]oo' -v)
+opts=(-c'#' -G'[fb]oo' -o)
 runTest
 
 test="Grep, search all"
-opts=(-c'#' -g'[fb]oo' -s)
+opts=(-c'#' -g'[fb]oo')
+runTest
+
+test="Sorted"
+opts=(-c'#' -s)
 runTest
 
 test="All, tabs expanded"
@@ -78,12 +82,12 @@ test="All, without comments (numbered)"
 opts=(-c'#' -a -n' ')
 runTest
 
-test="Fixed all, wrapped"
-opts=(-c'#' -f'1:' --wrap=40 -n' ')
+test="All, comments preserved"
+opts=(-c'#' -a -n' ' -p)
 runTest
 
-test="All, including zero (comments preserved)"
-opts=(-c'#' -af'0' -p -n' ')
+test="Fixed, wrapped"
+opts=(-c'#' -f'2:' --wrap=40 -n' ')
 runTest
 
 test="Fixed, including zero (canonically numbered)"
@@ -103,7 +107,7 @@ opts=(-c'#' -m -f'1:3' -n' ')
 runTest
 
 test="First, comments preserved"
-opts=(-c'#' -g'b[aeiou]t' -s --first -p -n' ')
+opts=(-c'#' -g'b[aeiou]t' --first -p -n' ')
 runTest
 
 test="(Next to) last"
