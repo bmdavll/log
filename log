@@ -22,11 +22,12 @@
 #   2009-09-28  Updated to conform to entries.pl
 #   2011-02-14  Use r and c for random and count, respectively
 #               Updated help
+#   2011-02-16  Added k operation
 #
 #########################################################################
 
 PROG=$(basename "$0")
-VERSION="1.0"
+VERSION="1.1"
 
 # default tabstop
 TS=4
@@ -54,28 +55,29 @@ popts=(--preserve)
 
 printUsage() {
 cat << -EOF-
-Usage: $PROG  [FILE]  ...
+Usage:  $PROG  [FILE]  ...
 
-Operations:                       Parameters:
-  r | p[fl] | o[fl] | c | e[fl]     [RANGE]...   [[$NOT]PATTERN]...
-  d                                 [RANGE]...
-  x | i                             [N]   [LINE|-]
-  a | s                             [LINE|-]
-  n[DELIM]  FILE                    [LINE|-]
-  l | m | h
+Operations:______________________|Parameters:___________________
+  r | p[fl] | o[fl] | c | e[fl]  |  [RANGE]...   [[$NOT]PATTERN]...
+  d | k                          |  RANGE...
+  x | i                          |  [N]   [LINE|-]
+  a | s                          |  [LINE|-]
+  n[DELIM]  FILE                 |  [LINE|-]
+  l | m | h                      |
 -EOF-
 if [ "$1" = "-v" ]; then
 local SP=$(printf '%*s' $((${#NOT}-1)) '')
 cat << -EOF-
 
-    r  random       e  edit      i  insert before    n  new
-    p  print all    d  delete    a  append           l  clear
-    o  one-line     x  extend    s  sorted insert    m  remove
-    c  count                                         h  help
+Legend:
+    r  random       e  edit      x  extend           n  new
+    p  print all    d  delete    i  insert before    l  clear
+    o  one-line     k  keep      a  append           m  remove
+    c  count                     s  sorted insert    h  help
 
-                 RANGE:
-    $NOT  not         +N  first N    N-   from N
-    -$SP  stdin       -N  last N     N-M  from N to M
+                              RANGE:
+           $NOT  not               +N  first N     N-   from N
+           -$SP  stdin             -N  last N      N-M  from N to M
 
 -EOF-
 printOptions
@@ -84,14 +86,13 @@ fi
 printOptions() {
 cat << -EOF-
 Options:
-  -h, --help  print this help message and exit
-  -w          do not wrap entries at $COLUMNS
-  -n          do not number entries
+  -h, --help  print full help message
+  -w          don't wrap entries at $COLUMNS
+  -n          don't number entries
   -c          canonically number entries starting from 1
-  -i          ignore case when matching PATTERN's
-  -a          all:
-              use entire entries, including comments, for searching/sorting
-              the alternative is to use only the first non-blank line
+  -i          ignore case for pattern-matching
+  -a          all: use the entire entry, including comments, for searching
+              and sorting; the default uses only the first non-blank line
   -f          edit entries with context:
               edit FILE itself when adding or editing a single entry
               open FILE concurrently if editing multiple entries
@@ -122,7 +123,7 @@ ignored. If DELIM is not specified, comments and blank lines are \
 associated with the previous non-blank line.
 
 DEFAULT specifies a default operation for the file; it may be any of the \
-operations listed below except [dnlm]. Additionally, it may be \"i-\", \
+operations listed below except [dknlm]. Additionally, it may be \"i-\", \
 \"a-\", or \"s-\" for adding an entry using input from stdin. The default \
 operation in the absence of DEFAULT is \"p\".
 
@@ -169,6 +170,7 @@ automatically edit the first or last matching entry, use \"ef\" or \"el\" \
 instead of \"e\".
 
   d           delete entries in range
+  k           keep entries in range, deleting the rest
   x [N]       extend entry N ≥ 0 (the last entry by default)
   i [N]       insert an entry before entry N ≥ 1 (1 by default)
   a           append an entry
@@ -329,7 +331,7 @@ getOp() {
     if [ "$1" = "h" ]; then
         printUsage -v
         exit 0
-    elif [[ "$1" == [rpocedxiasnlm] ]]; then
+    elif [[ "$1" == [rpocedkxiasnlm] ]]; then
         OP="$1"
         _edit_all=1
     elif [[ "$1" =~ ^([poe])([fl])$ ]]; then
@@ -375,7 +377,7 @@ if [ "$OP" = "n" ]; then
     getFile
     [ -e "$FILE" ] && errorExit "$_LOG: File or directory exists"
     if [ "$DELIM" ]; then
-        if [ "$_vim" ]; then
+        if [ "$_vim" -a "${#DELIM}" -ge 2 ]; then
             [[ "$DELIM" == *:* ]] && errorExit 1 "DELIM contains ':'"
             HEAD="vim:set fdm=marker fmr=$DELIM,$DELIM: $DELIM"1
         else
@@ -795,12 +797,21 @@ e)  checkEditor
     cleanUp
     ;;
 
-d)  [ $# -eq 0 ] && exit
+d|k)
+    [ $# -eq 0 ] && errorExit "Missing argument"
     popts=()
-    parseRanges -e "$@" || shift $?
+    case "$OP" in
+    d)  N=-e  ;;
+    k)  N=-f  ;;
+    esac
+    parseRanges $N "$@" || shift $?
     [ $# -gt 0 ] && errorUsage "Invalid argument for $OP: $1"
     makeTemp TEMPFILE
-    $GET -r -a "${opts[@]}" "${popts[@]}" >"$TEMPFILE" || errorExit
+    case "$OP" in
+    d)  N=-a  ;;
+    k)  N=-f0 ;;
+    esac
+    $GET -r $N "${opts[@]}" "${popts[@]}" >"$TEMPFILE" || errorExit
     checkWritable
     read <"$TEMPFILE"
     if [ "$REPLY" != "$HEAD" ]
