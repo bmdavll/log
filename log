@@ -22,12 +22,13 @@
 #   2009-09-28  Updated to conform to entries.pl
 #   2011-02-14  Use r and c for random and count, respectively
 #               Updated help
-#   2011-02-16  Added k operation
+#   2011-02-16  Added operation 'k'
+#   2011-03-06  Updated operation 'a' to allow insertion after any entry
 #
 #########################################################################
 
 PROG=$(basename "$0")
-VERSION="1.1"
+VERSION="1.2"
 
 # default tabstop
 TS=4
@@ -60,9 +61,8 @@ Usage:  $PROG  [FILE]  ...
 Operations:______________________|Parameters:___________________
   r | p[fl] | o[fl] | c | e[fl]  |  [RANGE]...   [[$NOT]PATTERN]...
   d | k                          |  RANGE...
-  x | i                          |  [N]   [LINE|-]
-  a | s                          |  [LINE|-]
-  n[DELIM]  FILE                 |  [LINE|-]
+  x | i | a                      |  [N]   [LINE|-]
+  s | n[DELIM]  FILE             |  [LINE|-]
   l | m | h                      |
 -EOF-
 if [ "$1" = "-v" ]; then
@@ -72,7 +72,7 @@ cat << -EOF-
 Legend:
     r  random       e  edit      x  extend           n  new
     p  print all    d  delete    i  insert before    l  clear
-    o  one-line     k  keep      a  append           m  remove
+    o  one-line     k  keep      a  append after     m  remove
     c  count                     s  sorted insert    h  help
 
                               RANGE:
@@ -173,9 +173,8 @@ instead of \"e\".
   k           keep entries in range, deleting the rest
   x [N]       extend entry N ≥ 0 (the last entry by default)
   i [N]       insert an entry before entry N ≥ 1 (1 by default)
-  a           append an entry
+  a [N]       append an entry after entry N ≥ 1 (last entry by default)
   s           insert an entry in sorted order
-              i.e. before the first entry that sorts lexicographically after
   n[DELIM]    create a new FILE in \$LOG_DIR, with optional DELIM
   l   m       clear/remove FILE
   h           print the usage string
@@ -454,7 +453,7 @@ if [[ "$DELIM" =~ ^[^[:alnum:]]+1?$ ]]; then
     TYPE=entry
 else
     DELIM=
-    TYPE=line
+    TYPE=line-item
 fi
 
 # functions
@@ -702,19 +701,21 @@ getIndex() {
         fi
         count=$($GET --count "$1" "${sopts[@]}") || errorExit
     done
-    N=$($GET --sort --list <($GET -r -f1 "$1" "${sopts[@]}")               \
-                           <($GET -r -f"1$SEP" "${opts[@]}") "${sopts[@]}" \
-        | awk '{
-            count += 1;
-            if ($1 == 1) {
-                print count; exit;
-            }
-        }'
-        testExit ${PIPESTATUS[0]})
+    N=$( $GET --sort --list <($GET -r -f1 "$1" "${sopts[@]}")               \
+                            <($GET -r -f"1$SEP" "${opts[@]}") "${sopts[@]}" \
+         | awk '{
+             count += 1;
+             if ($1 == 1) {
+                 print count; exit;
+             }
+         }'
+         testExit ${PIPESTATUS[0]} )
     [ ! "$N" ] && errorExit
 }
 
 # main
+declare -i N
+
 if [[ "$OP" == [rp] ]]; then
     [ "$OP" = "p" -a -n "$DELIM" ] && popts+=(--separate-entries)
     [ ! "$_no_wrap" ]              && popts+=(--wrap=$COLUMNS)
@@ -801,17 +802,17 @@ d|k)
     [ $# -eq 0 ] && errorExit "Missing argument"
     popts=()
     case "$OP" in
-    d)  N=-e  ;;
-    k)  N=-f  ;;
+    d)  flag=-e  ;;
+    k)  flag=-f  ;;
     esac
-    parseRanges $N "$@" || shift $?
+    parseRanges $flag "$@" || shift $?
     [ $# -gt 0 ] && errorUsage "Invalid argument for $OP: $1"
     makeTemp TEMPFILE
     case "$OP" in
-    d)  N=-a  ;;
-    k)  N=-f0 ;;
+    d)  flag=-a  ;;
+    k)  flag=-f0 ;;
     esac
-    $GET -r $N "${opts[@]}" "${popts[@]}" >"$TEMPFILE" || errorExit
+    $GET -r $flag "${opts[@]}" "${popts[@]}" >"$TEMPFILE" || errorExit
     checkWritable
     read <"$TEMPFILE"
     if [ "$REPLY" != "$HEAD" ]
@@ -821,9 +822,8 @@ d|k)
     cleanUp
     ;;
 
-x)  if [[ $# -eq 0 || ! "$1" =~ ^[0-9]+$ ]]
-    then N=
-    else N="$1" && shift
+x)  if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
+        N="$1" && shift
     fi
     extendMsg() {
         local after
@@ -856,10 +856,15 @@ x)  if [[ $# -eq 0 || ! "$1" =~ ^[0-9]+$ ]]
 
 i|a|s)
     checkEditor
-    if [ "$OP" = "i" ]; then
-        if [[ $# -eq 0 || ! "$1" =~ ^[1-9][0-9]*$ ]]
-        then N=1
-        else N="$1" && shift
+    if [ "$OP" != "s" ]; then
+        if [[ $# -gt 0 && "$1" =~ ^[1-9][0-9]*$ ]]; then
+            N="$1" && shift
+            if [ "$OP" = "a" ]; then
+                OP=i
+                N+=1
+            fi
+        elif [ "$OP" = "i" ]; then
+            N=1
         fi
     fi
     if [ $# -eq 1 -a "$1" = "-" ]; then
