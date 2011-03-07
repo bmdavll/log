@@ -20,10 +20,11 @@
 #   2009-07-23  File created
 #   2009-08-20  Rewrite with improved functionality
 #   2009-09-28  Updated to conform to entries.pl
-#   2011-02-14  Use r and c for random and count, respectively
+#   2011-02-14  Use 'r' and 'c' for random and count, respectively
 #               Updated help
 #   2011-02-16  Added operation 'k'
 #   2011-03-06  Updated operation 'a' to allow insertion after any entry
+#               Added messages for 'e' and 'd'
 #
 #########################################################################
 
@@ -794,6 +795,7 @@ e)  checkEditor
         done
         checkWritable
         cp "$TEMPFILE" "$FILE" || errorExit
+        [ ! "$_quiet" ] && echoc blue "write $_LOG"
     fi
     cleanUp
     ;;
@@ -802,11 +804,20 @@ d|k)
     [ $# -eq 0 ] && errorExit "Missing argument"
     popts=()
     case "$OP" in
-    d)  flag=-e  ;;
-    k)  flag=-f  ;;
+    d)  flag=-e ;;
+    k)  flag=-f ;;
     esac
     parseRanges $flag "$@" || shift $?
     [ $# -gt 0 ] && errorUsage "Invalid argument for $OP: $1"
+    if [ ! "$_quiet" ]; then
+        list=$( printf -- "%s" "${popts[*]}" |                         \
+                perl -p -e 's/'$flag'//g;'                             \
+                        -e 's/^\s+|\s+$//g;'                           \
+                        -e 's/(^|\s)(?='$SEP')/$g{1}1/g;'              \
+                        -e 's/(^|\s)-(\d+)'$SEP'(\s|$)/\1last \2\3/g;' \
+                        -e 's/'$SEP'/–/g;'                             \
+                        -e 's/\s+/, /g;'                               )
+    fi
     makeTemp TEMPFILE
     case "$OP" in
     d)  flag=-a  ;;
@@ -819,6 +830,16 @@ d|k)
     then echo "$HEAD" | cat - "$TEMPFILE" >"$FILE"
     else cp "$TEMPFILE" "$FILE"
     fi || errorExit
+
+    if [ ! "$_quiet" ]; then
+        case "$OP" in
+        d)  msg="delete" ;;
+        k)  msg="keep"   ;;
+        esac
+        msg+=" $_LOG $TYPE"
+        [[ ! "$list" =~ ^[0-9]+$ ]] && msg+="s"
+        echoc blue "$msg: $list"
+    fi
     cleanUp
     ;;
 
@@ -839,11 +860,11 @@ x)  if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
     fi
     checkWritable
     if [ ! "$N" ]; then
-        printf "%s\n" "$input" >>"$FILE" || errorExit
+        printf -- "%s\n" "$input" >>"$FILE" || errorExit
     else
         makeTemp TEMPFILE
         $GET -r -a -e"$((N+1))$SEP" "${opts[@]}"  >"$TEMPFILE" || errorExit
-        printf "%s\n" "$input" >>"$TEMPFILE"
+        printf -- "%s\n" "$input" >>"$TEMPFILE"
         $GET -r    -e"$SEP$N"       "${opts[@]}" >>"$TEMPFILE" || errorExit
         cp "$TEMPFILE" "$FILE" || errorExit
         cleanUp
@@ -899,7 +920,7 @@ i|a|s)
     fi
     if [ "${input+set}" ]; then
         appendDelim "$TEMPFILE"
-        printf "%s\n" "$input" >>"$TEMPFILE"
+        printf -- "%s\n" "$input" >>"$TEMPFILE"
     else
         appendTemplate "$TEMPFILE"
         edit "$TEMPFILE"
