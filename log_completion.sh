@@ -39,6 +39,7 @@ _log() {
     local LOG=log NBSP=' ' DBSP="$NBSP$NBSP"
     local cur="$2" ops='r p pf pl o of ol c e ef el d k x i a s n l m h'
     local i arg no_opt argv=() op file output compreply=() choices compfiles
+
     unset COMP_WORDS[0]
     for i in $(seq $COMP_CWORD ${#COMP_WORDS[@]}); do
         unset COMP_WORDS[$i]
@@ -56,62 +57,64 @@ _log() {
         esac
     done
     set -- "${argv[@]}"
+
     while true; do
-    if [ ! "$no_opt" ]; then
-        # option completion
-        if [[ "$cur" == --* ]]; then
-            compreply=('--help')
-            break
-        elif [[ "$cur" =~ ^-[hwncvisofeq]+$ ]]; then
-            compreply=("$cur")
-            break
-        elif [[ "$cur" == -* ]]; then
-            choices='--help -h -w -n -c -v -i -s -o -f -e -q'
-        fi
-    fi
-    if [ $# -eq 0 ]; then
-        # first argument
-        choices="$ops"
-        compfiles=1
-        break
-    fi
-    if __log_op "$2"; then
-        # file op
-        file="$1" && shift 2
-    elif __log_op "$1"; then
-        shift
-        if [ $# -gt 0 ]; then
-            # op file
-            file="$1" && shift
-        else
-            # op
-            if [[ "$op" == [edkxi] ]]; then
-                __log_print "$LOG" && break
+        if [[ ! "$no_opt" && "$cur" == -* ]]; then
+            # option completion
+            if [[ "$cur" == --* ]]; then
+                compreply=('--help')
+            elif [[ "$cur" =~ ^-[hwnciafeq]+$ ]]; then
+                compreply=("$cur")
+            else
+                choices='--help -h -w -n -c -i -a -f -e -q'
             fi
-            compfiles=1 && break
+            break
+        elif [ $# -eq 0 ]; then
+            # first argument
+            choices="$ops"
+            compfiles=1
+            break
         fi
-    elif [ $# -eq 1 ]; then
-        # file
-        choices="$ops"
+
+        if __log_op "$2"; then
+            # file op
+            file="$1" && shift 2
+        elif __log_op "$1"; then
+            shift
+            if [ $# -gt 0 ]; then
+                # op file
+                file="$1" && shift
+            else
+                # op
+                if [[ "$op" == [edkxia] ]]; then
+                    __log_print "$LOG" && break
+                fi
+                compfiles=1 && break
+            fi
+        elif [ $# -eq 1 ]; then
+            # file
+            choices="$ops"
+            break
+        else
+            break
+        fi
+
+        file=$(eval "echo $file")
+        [ ! -f "$LOG_DIR/$file" -a ! -f "$file" ] && break
+        if [[ $# -eq 0 && "$op" == [sn] || $# -eq 1 && "$op" == [xia] ]]; then
+            compreply=(-)
+        elif [[ "$op" == [rpoc] ]]; then
+            __log_print "$file"
+        elif [[ "$op" != [edkxia] || $# -ge 2 && "$op" == [xia] ]] ||
+            __log_print "$file"
+        then
+            :
+        else
+            choices=$(echo "$output" | awk '{print $1}')
+        fi
         break
-    else
-        break
-    fi
-    file=$(eval "echo $file")
-    [ ! -f "$LOG_DIR/$file" -a ! -f "$file" ] && break
-    if [[ $# -eq 0 && "$op" == [asn] || $# -eq 1 && "$op" == [xi] ]]; then
-        compreply=(-)
-    elif [[ "$op" == [rpoc] ]]; then
-        __log_print "$file"
-    elif [[ "$op" != [edkxi] || $# -ge 2 && "$op" == [xi] ]] ||
-        __log_print "$file"
-    then
-        :
-    else
-        choices=$(echo "$output" | awk '{print $1}')
-    fi
-    break
     done
+
     COMPREPLY=("${compreply[@]}" $(compgen -W "$choices" -- "$cur"))
     if [ "$compfiles" ]; then
         local IFS=$'\n' N=$(echo "$cur" | perl -ne 'print scalar split "/"')
