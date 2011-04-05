@@ -795,7 +795,7 @@ e)  checkEditor
         done
         checkWritable
         cp "$TEMPFILE" "$FILE" || errorExit
-        [ ! "$_quiet" ] && echoc blue "write $_LOG"
+        [ ! "$_quiet" ] && echoc blue "modified $_LOG"
     fi
     cleanUp
     ;;
@@ -833,8 +833,8 @@ d|k)
 
     if [ ! "$_quiet" ]; then
         case "$OP" in
-        d)  msg="delete" ;;
-        k)  msg="keep"   ;;
+        d)  msg="deleted" ;;
+        k)  msg="kept"   ;;
         esac
         msg+=" $_LOG $TYPE"
         [[ ! "$list" =~ ^[0-9]+$ ]] && msg+="s"
@@ -849,7 +849,7 @@ x)  if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
     extendMsg() {
         local after
         [ "$TYPE" = "line" ] && after=' after'
-        echoc blue "extend $_LOG${N:+$after $TYPE $N}:"
+        echoc blue "extend$1 $_LOG${N:+$after $TYPE $N}:"
     }
     if [ $# -eq 0 -o $# -eq 1 -a "$1" = "-" ]; then
         set --
@@ -870,7 +870,7 @@ x)  if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
         cleanUp
     fi
     if [ $# -gt 0 -a ! "$_quiet" ]; then
-        extendMsg
+        extendMsg ed
         echo "$@"
     fi
     ;;
@@ -936,8 +936,8 @@ i|a|s)
         fi
         insertMsg() {
             if [ "$N" ]
-            then echoc blue "insert $_LOG $TYPE $N$1"
-            else echoc blue "append $TYPE to $_LOG$1"
+            then echoc blue "inserted $_LOG $TYPE $N$1"
+            else echoc blue "appended $TYPE to $_LOG$1"
             fi
         }
         cat "$TEMPFILE" >>"$FILE" || errorExit
@@ -946,7 +946,7 @@ i|a|s)
                 insertMsg :
                 echo "$@"
             elif [ -z "$input" ]; then
-                insertMsg ...$'\n'ok
+                insertMsg
             fi
         fi
     fi
